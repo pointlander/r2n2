@@ -577,6 +577,8 @@ func RandomLearn() {
 	set.Add("b1", Symbols)
 	set.Add("w2", Width, Space)
 	set.Add("b2", Space)
+	set.Add("w2d", Space, Width)
+	set.Add("b2d", Width)
 	set.Add("w3", Space, Symbols)
 	set.Add("b3", Symbols)
 	for i := range set.Weights {
@@ -602,6 +604,92 @@ func RandomLearn() {
 		factor := float32(math.Sqrt(float64(w.S[0])))
 		for i := 0; i < cap(w.X); i++ {
 			w.X = append(w.X, Random32(-1, 1)/factor)
+		}
+	}
+	{
+		deltas := make([][]float32, 0, len(set.Weights))
+		for _, p := range set.Weights {
+			deltas = append(deltas, make([]float32, len(p.X)))
+		}
+
+		rng := rand.New(rand.NewSource(1))
+		for i := range feedback.X {
+			feedback.X[i] = 0
+		}
+		feedback.Zero()
+		alpha, eta := float32(.9), float32(.1)
+		for i := 0; i < 128; i++ {
+			set.Zero()
+			inputs := make([]*tf32.V, 0, 8)
+			input := tf32.NewV(Symbols, 1)
+			input.X = input.X[:cap(input.X)]
+			for i := range input.X {
+				e := math.Exp(rng.NormFloat64())
+				input.X[i] = float32(e / (e + 1))
+			}
+			inputs = append(inputs, &input)
+			l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"),
+				tf32.Concat(input.Meta(), feedback.Meta())), set.Get("b2")))
+			length := rng.Intn(32) + 1
+			for j := 0; j < length; j++ {
+				input := tf32.NewV(Symbols, 1)
+				input.X = input.X[:cap(input.X)]
+				for i := range input.X {
+					e := math.Exp(rng.NormFloat64())
+					input.X[i] = float32(e / (e + 1))
+				}
+				inputs = append(inputs, &input)
+				l1 = tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"),
+					tf32.Concat(input.Meta(), l1)), set.Get("b2")))
+			}
+			x := 0
+			y := Symbols
+			z := Width
+			options := map[string]interface{}{
+				"begin": &x,
+				"end":   &y,
+			}
+			options1 := map[string]interface{}{
+				"begin": &y,
+				"end":   &z,
+			}
+			l1d := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2d"), l1), set.Get("b2d")))
+			cost := tf32.Avg(tf32.Quadratic(tf32.Slice(l1d, options), inputs[0].Meta()))
+			for j := 0; j < length; j++ {
+				l1d = tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2d"), tf32.Slice(l1d, options1)), set.Get("b2d")))
+				cost = tf32.Add(cost, tf32.Avg(tf32.Quadratic(tf32.Slice(l1d, options), inputs[j+1].Meta())))
+			}
+			total := tf32.Gradient(cost).X[0]
+			norm := float32(0)
+			for _, p := range set.Weights {
+				for _, d := range p.D {
+					norm += d * d
+				}
+			}
+			norm = float32(math.Sqrt(float64(norm)))
+			if norm > 1 {
+				scaling := 1 / norm
+				for k, p := range set.Weights {
+					if p.N != "w2" || p.N != "b2" || p.N != "w2d" || p.N != "b2d" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
+						p.X[l] += deltas[k][l]
+					}
+				}
+			} else {
+				for k, p := range set.Weights {
+					if p.N != "w2" || p.N != "b2" || p.N != "w2d" || p.N != "b2d" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d
+						p.X[l] += deltas[k][l]
+					}
+				}
+			}
+			fmt.Println("pre", length, total/float32(length))
 		}
 	}
 
@@ -660,7 +748,7 @@ func RandomLearn() {
 			if norm > 1 {
 				scaling := 1 / norm
 				for k, p := range set.Weights {
-					if p.N == "w2" || p.N == "b2" {
+					if p.N == "w2" || p.N == "b2" || p.N == "w2d" || p.N == "b2d" {
 						continue
 					}
 					for l, d := range p.D {
@@ -670,7 +758,7 @@ func RandomLearn() {
 				}
 			} else {
 				for k, p := range set.Weights {
-					if p.N == "w2" || p.N == "b2" {
+					if p.N == "w2" || p.N == "b2" || p.N == "w2d" || p.N == "b2d" {
 						continue
 					}
 					for l, d := range p.D {
