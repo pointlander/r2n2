@@ -571,9 +571,9 @@ func RandomLearn() {
 	set := tf32.NewSet()
 	set.Add("w1", Symbols, Symbols)
 	set.Add("b1", Symbols)
-	set.Add("w2", Width, Width)
-	set.Add("b2", Width)
-	set.Add("w3", Width, Symbols)
+	set.Add("w2", Width, Space)
+	set.Add("b2", Space)
+	set.Add("w3", Space, Symbols)
 	set.Add("b3", Symbols)
 	for i := range set.Weights {
 		w := set.Weights[i]
