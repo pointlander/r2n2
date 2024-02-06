@@ -581,6 +581,20 @@ func RandomLearn() {
 			w.X = w.X[:cap(w.X)]
 			continue
 		}
+		/*if w.N == "w2" {
+			factor := math.Sqrt(3)
+			for i := 0; i < cap(w.X); i++ {
+				x := rand.Intn(6)
+				if x == 0 {
+					w.X = append(w.X, float32(1*factor))
+				} else if x == 1 {
+					w.X = append(w.X, float32(-1*factor))
+				} else {
+					w.X = append(w.X, 0)
+				}
+			}
+			continue
+		}*/
 		factor := float32(math.Sqrt(float64(w.S[0])))
 		for i := 0; i < cap(w.X); i++ {
 			w.X = append(w.X, Random32(-1, 1)/factor)
@@ -593,7 +607,7 @@ func RandomLearn() {
 	}
 
 	iterations := 100
-	alpha, eta := float32(.9), float32(.1)
+	alpha, eta := float32(.8), float32(.2)
 	points := make(plotter.XYs, 0, iterations)
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
@@ -616,10 +630,6 @@ func RandomLearn() {
 				set.Zero()
 				l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 				l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1, feedback.Meta())), set.Get("b2")))
-				l2(func(a *tf32.V) bool {
-					copy(feedback.X, a.X)
-					return true
-				})
 				l3 := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))), next.Meta())
 				cost += tf32.Gradient(l3).X[0]
 
@@ -652,6 +662,11 @@ func RandomLearn() {
 						}
 					}
 				}
+
+				l2(func(a *tf32.V) bool {
+					copy(feedback.X, a.X)
+					return true
+				})
 			}
 			cost /= float32(len(verses[i].Verse))
 			total += cost
