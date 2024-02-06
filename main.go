@@ -566,6 +566,10 @@ func RandomLearn() {
 	}
 	verses := bible.GetVerses()
 
+	input := tf32.NewV(Symbols, 1)
+	input.X = input.X[:cap(input.X)]
+	output := tf32.NewV(Symbols, 1)
+	output.X = output.X[:cap(output.X)]
 	feedback := tf32.NewV(Space, 1)
 	feedback.X = feedback.X[:cap(feedback.X)]
 	set := tf32.NewSet()
@@ -606,8 +610,12 @@ func RandomLearn() {
 		deltas = append(deltas, make([]float32, len(p.X)))
 	}
 
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1, feedback.Meta())), set.Get("b2")))
+	l3 := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))), output.Meta())
+
 	iterations := 100
-	alpha, eta := float32(.8), float32(.2)
+	alpha, eta := float32(.9), float32(.1)
 	points := make(plotter.XYs, 0, iterations)
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
@@ -618,55 +626,58 @@ func RandomLearn() {
 
 		total := float32(0)
 		for i := 0; i < len(verses); i++ {
+			for i := range feedback.X {
+				feedback.X[i] = 0
+			}
 			feedback.Zero()
+			set.Zero()
 			cost := float32(0)
 			for l, symbol := range verses[i].Verse[:len(verses[i].Verse)-1] {
-				input := tf32.NewV(Symbols, 1)
-				input.X = input.X[:cap(input.X)]
+				for i := range input.X {
+					input.X[i] = 0
+				}
+				input.Zero()
 				input.X[int(symbol)] = 1
-				next := tf32.NewV(Symbols, 1)
-				next.X = next.X[:cap(next.X)]
-				next.X[int(verses[i].Verse[l+1])] = 1
-				set.Zero()
-				l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
-				l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1, feedback.Meta())), set.Get("b2")))
-				l3 := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))), next.Meta())
+				for i := range output.X {
+					output.X[i] = 0
+				}
+				output.Zero()
+				output.X[int(verses[i].Verse[l+1])] = 1
 				cost += tf32.Gradient(l3).X[0]
-
-				norm := float32(0)
-				for _, p := range set.Weights {
-					for _, d := range p.D {
-						norm += d * d
-					}
-				}
-				norm = float32(math.Sqrt(float64(norm)))
-				if norm > 1 {
-					scaling := 1 / norm
-					for k, p := range set.Weights {
-						if p.N == "w2" || p.N == "b2" {
-							continue
-						}
-						for l, d := range p.D {
-							deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
-							p.X[l] += deltas[k][l]
-						}
-					}
-				} else {
-					for k, p := range set.Weights {
-						if p.N == "w2" || p.N == "b2" {
-							continue
-						}
-						for l, d := range p.D {
-							deltas[k][l] = alpha*deltas[k][l] - eta*d
-							p.X[l] += deltas[k][l]
-						}
-					}
-				}
 
 				l2(func(a *tf32.V) bool {
 					copy(feedback.X, a.X)
 					return true
 				})
+			}
+			norm := float32(0)
+			for _, p := range set.Weights {
+				for _, d := range p.D {
+					norm += d * d
+				}
+			}
+			norm = float32(math.Sqrt(float64(norm)))
+			if norm > 1 {
+				scaling := 1 / norm
+				for k, p := range set.Weights {
+					if p.N == "w2" || p.N == "b2" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
+						p.X[l] += deltas[k][l]
+					}
+				}
+			} else {
+				for k, p := range set.Weights {
+					if p.N == "w2" || p.N == "b2" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d
+						p.X[l] += deltas[k][l]
+					}
+				}
 			}
 			cost /= float32(len(verses[i].Verse))
 			total += cost
