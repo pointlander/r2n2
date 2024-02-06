@@ -670,7 +670,7 @@ func RandomLearn() {
 			if norm > 1 {
 				scaling := 1 / norm
 				for k, p := range set.Weights {
-					if p.N != "w2" || p.N != "b2" || p.N != "w2d" || p.N != "b2d" {
+					if p.N != "w2" && p.N != "b2" && p.N != "w2d" && p.N != "b2d" {
 						continue
 					}
 					for l, d := range p.D {
@@ -680,7 +680,7 @@ func RandomLearn() {
 				}
 			} else {
 				for k, p := range set.Weights {
-					if p.N != "w2" || p.N != "b2" || p.N != "w2d" || p.N != "b2d" {
+					if p.N != "w2" && p.N != "b2" && p.N != "w2d" && p.N != "b2d" {
 						continue
 					}
 					for l, d := range p.D {
