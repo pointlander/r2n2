@@ -61,6 +61,8 @@ func main() {
 			FixedLearn()
 		case "variable":
 			VariableLearn()
+		case "random":
+			RandomLearn()
 		}
 
 		return
@@ -519,6 +521,141 @@ func FixedLearn() {
 					}
 				}
 			}
+		}
+		fmt.Printf("\n")
+
+		err := set.Save(fmt.Sprintf("weights_%d.w", i), total, i)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(i, total, time.Now().Sub(start))
+		start = time.Now()
+		points = append(points, plotter.XY{X: float64(i), Y: float64(total)})
+		if total < .001 {
+			fmt.Println("stopping...")
+			break
+		}
+	}
+
+	p := plot.New()
+
+	p.Title.Text = "epochs vs cost"
+	p.X.Label.Text = "epochs"
+	p.Y.Label.Text = "cost"
+
+	scatter, err := plotter.NewScatter(points)
+	if err != nil {
+		panic(err)
+	}
+	scatter.GlyphStyle.Radius = vg.Length(1)
+	scatter.GlyphStyle.Shape = draw.CircleGlyph{}
+	p.Add(scatter)
+
+	err = p.Save(8*vg.Inch, 8*vg.Inch, "epochs.png")
+	if err != nil {
+		panic(err)
+	}
+}
+
+// RandomLearn learns the r2n2 model
+func RandomLearn() {
+	bible, err := bible.Load()
+	if err != nil {
+		panic(err)
+	}
+	verses := bible.GetVerses()
+
+	feedback := tf32.NewV(Space, 1)
+	feedback.X = feedback.X[:cap(feedback.X)]
+	set := tf32.NewSet()
+	set.Add("w1", Symbols, Symbols)
+	set.Add("b1", Symbols)
+	set.Add("w2", Width, Width)
+	set.Add("b2", Width)
+	set.Add("w3", Width, Symbols)
+	set.Add("b3", Symbols)
+	for i := range set.Weights {
+		w := set.Weights[i]
+		if strings.HasPrefix(w.N, "b") {
+			w.X = w.X[:cap(w.X)]
+			continue
+		}
+		factor := float32(math.Sqrt(float64(w.S[0])))
+		for i := 0; i < cap(w.X); i++ {
+			w.X = append(w.X, Random32(-1, 1)/factor)
+		}
+	}
+
+	deltas := make([][]float32, 0, len(set.Weights))
+	for _, p := range set.Weights {
+		deltas = append(deltas, make([]float32, len(p.X)))
+	}
+
+	iterations := 100
+	alpha, eta := float32(.9), float32(.1)
+	points := make(plotter.XYs, 0, iterations)
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		for i := range verses {
+			j := i + rand.Intn(len(verses)-i)
+			verses[i], verses[j] = verses[j], verses[i]
+		}
+
+		total := float32(0)
+		for i := 0; i < len(verses); i++ {
+			feedback.Zero()
+			cost := float32(0)
+			for l, symbol := range verses[i].Verse[:len(verses[i].Verse)-1] {
+				input := tf32.NewV(Symbols, 1)
+				input.X = input.X[:cap(input.X)]
+				input.X[int(symbol)] = 1
+				next := tf32.NewV(Symbols, 1)
+				next.X = next.X[:cap(next.X)]
+				next.X[int(verses[i].Verse[l+1])] = 1
+				set.Zero()
+				l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+				l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1, feedback.Meta())), set.Get("b2")))
+				l2(func(a *tf32.V) bool {
+					copy(feedback.X, a.X)
+					return true
+				})
+				l3 := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3"))), next.Meta())
+				cost += tf32.Gradient(l3).X[0]
+
+				norm := float32(0)
+				for _, p := range set.Weights {
+					for _, d := range p.D {
+						norm += d * d
+					}
+				}
+				norm = float32(math.Sqrt(float64(norm)))
+				if norm > 1 {
+					scaling := 1 / norm
+					for k, p := range set.Weights {
+						if p.N == "w2" || p.N == "b2" {
+							continue
+						}
+						for l, d := range p.D {
+							deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
+							p.X[l] += deltas[k][l]
+						}
+					}
+				} else {
+					for k, p := range set.Weights {
+						if p.N == "w2" || p.N == "b2" {
+							continue
+						}
+						for l, d := range p.D {
+							deltas[k][l] = alpha*deltas[k][l] - eta*d
+							p.X[l] += deltas[k][l]
+						}
+					}
+				}
+			}
+			cost /= float32(len(verses[i].Verse))
+			total += cost
+			fmt.Println(cost)
 		}
 		fmt.Printf("\n")
 
