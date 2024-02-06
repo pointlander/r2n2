@@ -714,13 +714,14 @@ func RandomLearn() {
 
 		total := float32(0)
 		for i := 0; i < len(verses); i++ {
+			verse := "^" + verses[i].Verse + "$"
 			for i := range feedback.X {
 				feedback.X[i] = 0
 			}
 			feedback.Zero()
 			set.Zero()
 			cost := float32(0)
-			for l, symbol := range verses[i].Verse[:len(verses[i].Verse)-1] {
+			for l, symbol := range verse[:len(verses[i].Verse)-1] {
 				for i := range input.X {
 					input.X[i] = 0
 				}
@@ -730,7 +731,7 @@ func RandomLearn() {
 					output.X[i] = 0
 				}
 				output.Zero()
-				output.X[int(verses[i].Verse[l+1])] = 1
+				output.X[int(verse[l+1])] = 1
 				cost += tf32.Gradient(l3).X[0]
 
 				l2(func(a *tf32.V) bool {
