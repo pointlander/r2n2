@@ -67,7 +67,7 @@ func main() {
 
 		return
 	} else if *FlagInference != "" {
-		Inference()
+		RandomInference()
 	} else if *FlagGraph != "" {
 		Graph(*FlagGraph)
 		return
@@ -806,6 +806,63 @@ func RandomLearn() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// RandomInference inference mode
+func RandomInference() {
+	set := tf32.NewSet()
+	cost, epoch, err := set.Open(*FlagInference)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(cost, epoch)
+	bestSum, best := float32(0.0), []rune{}
+	var search func(depth int, most []rune, previous *tf32.V, sum float32)
+	search = func(depth int, most []rune, previous *tf32.V, sum float32) {
+		if depth > 2 {
+			if sum > bestSum {
+				best, bestSum = most, sum
+				fmt.Println(best)
+				fmt.Println(string(best))
+			}
+			return
+		}
+
+		input, feedback := tf32.NewV(Symbols, 1), tf32.NewV(Space, 1)
+		input.X = input.X[:cap(input.X)]
+		feedback.X = feedback.X[:cap(feedback.X)]
+		copy(feedback.X, previous.X)
+		l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+		l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1, feedback.Meta())), set.Get("b2")))
+		l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+		setSymbol := func(s rune) {
+			for i := range input.X {
+				input.X[i] = 0
+			}
+			symbol := int(s)
+			input.X[symbol] = 1
+		}
+		setSymbol(most[len(most)-1])
+		next := tf32.NewV(Space, 1)
+		next.X = next.X[:cap(next.X)]
+		l2(func(a *tf32.V) bool {
+			copy(next.X, a.X)
+			return true
+		})
+		l3(func(a *tf32.V) bool {
+			symbols := a.X
+			for i, symbol := range symbols {
+				cp := make([]rune, len(most))
+				copy(cp, most)
+				cp = append(cp, rune(i))
+				search(depth+1, cp, &next, sum+symbol)
+			}
+			return true
+		})
+	}
+	initial := tf32.NewV(Space, 1)
+	initial.X = initial.X[:cap(initial.X)]
+	search(0, []rune{'^'}, &initial, 0)
 }
 
 // Random32 return a random float32
