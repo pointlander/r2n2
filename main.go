@@ -46,6 +46,8 @@ var (
 	FlagVerbose = flag.Bool("verbose", false, "verbose mode")
 	// FlagLearn learn the model
 	FlagLearn = flag.String("learn", "", "learning mode")
+	// Flag2X use the 2X model
+	Flag2X = flag.Bool("2X", false, "learn the 2X model")
 	// FlagGraph graphs the model files
 	FlagGraph = flag.String("graph", "", "graph mode")
 	// FlagInference load weights and generate probable strings
@@ -56,6 +58,10 @@ func main() {
 	flag.Parse()
 
 	if *FlagLearn != "" {
+		if *Flag2X {
+			Learn2X()
+			return
+		}
 		Learn()
 		return
 	} else if *FlagInference != "" {
@@ -457,6 +463,262 @@ func Inference() {
 	initial := tf32.NewV(Space, 1)
 	initial.X = initial.X[:cap(initial.X)]
 	search(0, []rune{'^'}, &initial, 0)
+}
+
+// Learn2X learns 2X the r2n2 model
+func Learn2X() {
+	bible, err := bible.Load()
+	if err != nil {
+		panic(err)
+	}
+	verses := bible.GetVerses()
+
+	input := tf32.NewV(Symbols, 1)
+	input.X = input.X[:cap(input.X)]
+	output := tf32.NewV(Symbols, 1)
+	output.X = output.X[:cap(output.X)]
+	feedback := tf32.NewV(Space, 1)
+	feedback.X = feedback.X[:cap(feedback.X)]
+	set := tf32.NewSet()
+	set.Add("w1", Symbols, Symbols)
+	set.Add("b1", Symbols)
+	set.Add("w1a", Symbols, Symbols)
+	set.Add("b1a", Symbols)
+	set.Add("w2", Width, Space)
+	set.Add("b2", Space)
+	set.Add("w2d", Space, Width)
+	set.Add("b2d", Width)
+	set.Add("w3", Space, Space)
+	set.Add("b3", Space)
+	set.Add("w3a", Space, Symbols)
+	set.Add("b3a", Symbols)
+	for i := range set.Weights {
+		w := set.Weights[i]
+		if strings.HasPrefix(w.N, "b") {
+			w.X = w.X[:cap(w.X)]
+			continue
+		}
+		/*if w.N == "w2" {
+			factor := math.Sqrt(3)
+			for i := 0; i < cap(w.X); i++ {
+				x := rand.Intn(6)
+				if x == 0 {
+					w.X = append(w.X, float32(1*factor))
+				} else if x == 1 {
+					w.X = append(w.X, float32(-1*factor))
+				} else {
+					w.X = append(w.X, 0)
+				}
+			}
+			continue
+		}*/
+		factor := float32(math.Sqrt(float64(w.S[0])))
+		for i := 0; i < cap(w.X); i++ {
+			w.X = append(w.X, Random32(-1, 1)/factor)
+		}
+	}
+	{
+		deltas := make([][]float32, 0, len(set.Weights))
+		for _, p := range set.Weights {
+			deltas = append(deltas, make([]float32, len(p.X)))
+		}
+
+		rng := rand.New(rand.NewSource(1))
+		for i := range feedback.X {
+			feedback.X[i] = 0
+		}
+		feedback.Zero()
+		alpha, eta := float32(.9), float32(.1)
+		for i := 0; i < 128; i++ {
+			set.Zero()
+			inputs := make([]*tf32.V, 0, 8)
+			input := tf32.NewV(Symbols, 1)
+			input.X = input.X[:cap(input.X)]
+			for i := range input.X {
+				e := math.Exp(rng.NormFloat64())
+				input.X[i] = float32(e / (e + 1))
+			}
+			inputs = append(inputs, &input)
+			l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"),
+				tf32.Concat(input.Meta(), feedback.Meta())), set.Get("b2")))
+			length := rng.Intn(32) + 1
+			for j := 0; j < length; j++ {
+				input := tf32.NewV(Symbols, 1)
+				input.X = input.X[:cap(input.X)]
+				for i := range input.X {
+					e := math.Exp(rng.NormFloat64())
+					input.X[i] = float32(e / (e + 1))
+				}
+				inputs = append(inputs, &input)
+				l1 = tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"),
+					tf32.Concat(input.Meta(), l1)), set.Get("b2")))
+			}
+			x := 0
+			y := Symbols
+			z := Width
+			options := map[string]interface{}{
+				"begin": &x,
+				"end":   &y,
+			}
+			options1 := map[string]interface{}{
+				"begin": &y,
+				"end":   &z,
+			}
+			l1d := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2d"), l1), set.Get("b2d")))
+			cost := tf32.Avg(tf32.Quadratic(tf32.Slice(l1d, options), inputs[0].Meta()))
+			for j := 0; j < length; j++ {
+				l1d = tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2d"), tf32.Slice(l1d, options1)), set.Get("b2d")))
+				cost = tf32.Add(cost, tf32.Avg(tf32.Quadratic(tf32.Slice(l1d, options), inputs[j+1].Meta())))
+			}
+			total := tf32.Gradient(cost).X[0]
+			norm := float32(0)
+			for _, p := range set.Weights {
+				for _, d := range p.D {
+					norm += d * d
+				}
+			}
+			norm = float32(math.Sqrt(float64(norm)))
+			if norm > 1 {
+				scaling := 1 / norm
+				for k, p := range set.Weights {
+					if p.N != "w2" && p.N != "b2" && p.N != "w2d" && p.N != "b2d" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
+						p.X[l] += deltas[k][l]
+					}
+				}
+			} else {
+				for k, p := range set.Weights {
+					if p.N != "w2" && p.N != "b2" && p.N != "w2d" && p.N != "b2d" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d
+						p.X[l] += deltas[k][l]
+					}
+				}
+			}
+			fmt.Println("pre", length, total/float32(length))
+		}
+	}
+
+	deltas := make([][]float32, 0, len(set.Weights))
+	for _, p := range set.Weights {
+		deltas = append(deltas, make([]float32, len(p.X)))
+	}
+
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+	l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
+	l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l3a := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
+
+	iterations := 100
+	alpha, eta := float32(.9), float32(.1)
+	points := make(plotter.XYs, 0, iterations)
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		for i := range verses {
+			j := i + rand.Intn(len(verses)-i)
+			verses[i], verses[j] = verses[j], verses[i]
+		}
+
+		total := float32(0)
+		for i := 0; i < len(verses); i++ {
+			verse := "^" + verses[i].Verse + "$"
+			for i := range feedback.X {
+				feedback.X[i] = 0
+			}
+			feedback.Zero()
+			set.Zero()
+			cost := float32(0)
+			for l, symbol := range verse[:len(verses[i].Verse)-1] {
+				for i := range input.X {
+					input.X[i] = 0
+				}
+				input.Zero()
+				input.X[int(symbol)] = 1
+				for i := range output.X {
+					output.X[i] = 0
+				}
+				output.Zero()
+				output.X[int(verse[l+1])] = 1
+				cost += tf32.Gradient(l3a).X[0]
+
+				l2(func(a *tf32.V) bool {
+					copy(feedback.X, a.X)
+					return true
+				})
+			}
+			norm := float32(0)
+			for _, p := range set.Weights {
+				for _, d := range p.D {
+					norm += d * d
+				}
+			}
+			norm = float32(math.Sqrt(float64(norm)))
+			if norm > 1 {
+				scaling := 1 / norm
+				for k, p := range set.Weights {
+					if p.N == "w2" || p.N == "b2" || p.N == "w2d" || p.N == "b2d" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
+						p.X[l] += deltas[k][l]
+					}
+				}
+			} else {
+				for k, p := range set.Weights {
+					if p.N == "w2" || p.N == "b2" || p.N == "w2d" || p.N == "b2d" {
+						continue
+					}
+					for l, d := range p.D {
+						deltas[k][l] = alpha*deltas[k][l] - eta*d
+						p.X[l] += deltas[k][l]
+					}
+				}
+			}
+			cost /= float32(len(verses[i].Verse))
+			total += cost
+			fmt.Println(cost)
+		}
+		fmt.Printf("\n")
+
+		err := set.Save(fmt.Sprintf("weights_%d.w", i), total, i)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(i, total, time.Now().Sub(start))
+		start = time.Now()
+		points = append(points, plotter.XY{X: float64(i), Y: float64(total)})
+		if total < .001 {
+			fmt.Println("stopping...")
+			break
+		}
+	}
+
+	p := plot.New()
+
+	p.Title.Text = "epochs vs cost"
+	p.X.Label.Text = "epochs"
+	p.Y.Label.Text = "cost"
+
+	scatter, err := plotter.NewScatter(points)
+	if err != nil {
+		panic(err)
+	}
+	scatter.GlyphStyle.Radius = vg.Length(1)
+	scatter.GlyphStyle.Shape = draw.CircleGlyph{}
+	p.Add(scatter)
+
+	err = p.Save(8*vg.Inch, 8*vg.Inch, "epochs.png")
+	if err != nil {
+		panic(err)
+	}
 }
 
 // Random32 return a random float32
