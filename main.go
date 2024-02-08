@@ -37,6 +37,21 @@ const (
 	Batch = 256
 	// Scale scales the neural network
 	Scale = 2
+	// B1 exponential decay of the rate for the first moment estimates
+	B1 = 0.9
+	// B2 exponential decay rate for the second-moment estimates
+	B2 = 0.999
+	// Eta is the learning rate
+	Eta = .00001
+)
+
+const (
+	// StateM is the state for the mean
+	StateM = iota
+	// StateV is the state for the variance
+	StateV
+	// StateTotal is the total number of states
+	StateTotal
 )
 
 var (
@@ -496,6 +511,10 @@ func Learn2X() {
 		w := set.Weights[i]
 		if strings.HasPrefix(w.N, "b") {
 			w.X = w.X[:cap(w.X)]
+			w.States = make([][]float32, StateTotal)
+			for i := range w.States {
+				w.States[i] = make([]float32, len(w.X))
+			}
 			continue
 		}
 		/*if w.N == "w2" {
@@ -515,6 +534,10 @@ func Learn2X() {
 		factor := float32(math.Sqrt(float64(w.S[0])))
 		for i := 0; i < cap(w.X); i++ {
 			w.X = append(w.X, Random32(-1, 1)/factor)
+		}
+		w.States = make([][]float32, StateTotal)
+		for i := range w.States {
+			w.States[i] = make([]float32, len(w.X))
 		}
 	}
 	{
@@ -604,11 +627,6 @@ func Learn2X() {
 		}
 	}
 
-	deltas := make([][]float32, 0, len(set.Weights))
-	for _, p := range set.Weights {
-		deltas = append(deltas, make([]float32, len(p.X)))
-	}
-
 	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 	l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
@@ -616,10 +634,17 @@ func Learn2X() {
 	l3a := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
 
 	iterations := 100
-	alpha, eta := float32(.9), float32(.1)
 	points := make(plotter.XYs, 0, iterations)
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
+		pow := func(x float32) float32 {
+			y := math.Pow(float64(x), float64(i+1))
+			if math.IsNaN(y) || math.IsInf(y, 0) {
+				return 0
+			}
+			return float32(y)
+		}
+
 		for i := range verses {
 			j := i + rand.Intn(len(verses)-i)
 			verses[i], verses[j] = verses[j], verses[i]
@@ -659,25 +684,39 @@ func Learn2X() {
 				}
 			}
 			norm = float32(math.Sqrt(float64(norm)))
+			b1, b2 := pow(B1), pow(B2)
 			if norm > 1 {
 				scaling := 1 / norm
-				for k, p := range set.Weights {
-					if p.N == "w2" || p.N == "b2" || p.N == "w2d" || p.N == "b2d" {
+				for k, w := range set.Weights {
+					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
 						continue
 					}
-					for l, d := range p.D {
-						deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
-						p.X[l] += deltas[k][l]
+					for l, d := range w.D {
+						g := d * scaling
+						m := B1*w.States[StateM][k] + (1-B1)*g
+						v := B2*w.States[StateV][k] + (1-B2)*g*g
+						w.States[StateM][k] = m
+						w.States[StateV][k] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
 			} else {
-				for k, p := range set.Weights {
-					if p.N == "w2" || p.N == "b2" || p.N == "w2d" || p.N == "b2d" {
+				for k, w := range set.Weights {
+					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
 						continue
 					}
-					for l, d := range p.D {
-						deltas[k][l] = alpha*deltas[k][l] - eta*d
-						p.X[l] += deltas[k][l]
+					for l, d := range w.D {
+						g := d
+						m := B1*w.States[StateM][k] + (1-B1)*g
+						v := B2*w.States[StateV][k] + (1-B2)*g*g
+						w.States[StateM][k] = m
+						w.States[StateV][k] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
+
 					}
 				}
 			}
