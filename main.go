@@ -687,32 +687,32 @@ func Learn2X() {
 			b1, b2 := pow(B1), pow(B2)
 			if norm > 1 {
 				scaling := 1 / norm
-				for k, w := range set.Weights {
+				for _, w := range set.Weights {
 					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
 						continue
 					}
 					for l, d := range w.D {
 						g := d * scaling
-						m := B1*w.States[StateM][k] + (1-B1)*g
-						v := B2*w.States[StateV][k] + (1-B2)*g*g
-						w.States[StateM][k] = m
-						w.States[StateV][k] = v
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
 						mhat := m / (1 - b1)
 						vhat := v / (1 - b2)
 						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
 			} else {
-				for k, w := range set.Weights {
+				for _, w := range set.Weights {
 					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
 						continue
 					}
 					for l, d := range w.D {
 						g := d
-						m := B1*w.States[StateM][k] + (1-B1)*g
-						v := B2*w.States[StateV][k] + (1-B2)*g*g
-						w.States[StateM][k] = m
-						w.States[StateV][k] = v
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
 						mhat := m / (1 - b1)
 						vhat := v / (1 - b2)
 						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
