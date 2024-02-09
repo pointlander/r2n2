@@ -42,7 +42,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.999
 	// Eta is the learning rate
-	Eta = .001
+	Eta = .0001
 )
 
 const (
@@ -622,7 +622,7 @@ func Learn2X() {
 	l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
 	l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	l3a := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
+	l3a := tf32.CrossEntropy(tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
 
 	iterations := 100
 	points := make(plotter.XYs, 0, iterations)
@@ -778,7 +778,7 @@ func Inference2X() {
 		l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
 		l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
 		l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-		l3a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+		l3a := tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
 		setSymbol := func(s rune) {
 			for i := range input.X {
 				input.X[i] = 0
@@ -814,7 +814,7 @@ func Inference2X() {
 	l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, initial.Meta())), set.Get("b2")))
 	//l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	//l3a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+	//l3a := tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
 	for i := range in[:len(in)-1] {
 		for j := range input.X {
 			input.X[j] = 0
