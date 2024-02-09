@@ -65,6 +65,10 @@ func main() {
 		Learn()
 		return
 	} else if *FlagInference != "" {
+		if *Flag2X {
+			Inference2X()
+			return
+		}
 		Inference()
 		return
 	} else if *FlagGraph != "" {
@@ -408,7 +412,7 @@ func Learn() {
 	}
 }
 
-// Inference inference r2n2 mode
+// Inference inference r2n2 model
 func Inference() {
 	set := tf32.NewSet()
 	cost, epoch, err := set.Open(*FlagInference)
@@ -719,6 +723,84 @@ func Learn2X() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// Inference2X inference 2X r2n2 model
+func Inference2X() {
+	set := tf32.NewSet()
+	cost, epoch, err := set.Open(*FlagInference)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(cost, epoch)
+	bestSum, best := float32(0.0), []rune{}
+	var search func(depth int, most []rune, previous *tf32.V, sum float32)
+	search = func(depth int, most []rune, previous *tf32.V, sum float32) {
+		if depth > 2 {
+			if sum > bestSum {
+				best, bestSum = most, sum
+				fmt.Println(best)
+				fmt.Println(string(best))
+			}
+			return
+		}
+
+		input, feedback := tf32.NewV(Symbols, 1), tf32.NewV(Space, 1)
+		input.X = input.X[:cap(input.X)]
+		feedback.X = feedback.X[:cap(feedback.X)]
+		copy(feedback.X, previous.X)
+		l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+		l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+		l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
+		l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+		l3a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+		setSymbol := func(s rune) {
+			for i := range input.X {
+				input.X[i] = 0
+			}
+			symbol := int(s)
+			input.X[symbol] = 1
+		}
+		setSymbol(most[len(most)-1])
+		next := tf32.NewV(Space, 1)
+		next.X = next.X[:cap(next.X)]
+		l2(func(a *tf32.V) bool {
+			copy(next.X, a.X)
+			return true
+		})
+		l3a(func(a *tf32.V) bool {
+			symbols := a.X
+			for i, symbol := range symbols {
+				cp := make([]rune, len(most))
+				copy(cp, most)
+				cp = append(cp, rune(i))
+				search(depth+1, cp, &next, sum+symbol)
+			}
+			return true
+		})
+	}
+	in := []rune{'^', 'T'}
+	input := tf32.NewV(Space, 1)
+	input.X = input.X[:cap(input.X)]
+	initial := tf32.NewV(Space, 1)
+	initial.X = initial.X[:cap(initial.X)]
+
+	l1 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+	l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, initial.Meta())), set.Get("b2")))
+	//l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
+	//l3a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+	for i := range in[:len(in)-1] {
+		for j := range input.X {
+			input.X[j] = 0
+		}
+		input.X[int(in[i])] = 1
+		l2(func(a *tf32.V) bool {
+			copy(initial.X, a.X)
+			return true
+		})
+	}
+	search(0, in[len(in)-1:], &initial, 0)
 }
 
 // Random32 return a random float32
