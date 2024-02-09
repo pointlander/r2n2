@@ -42,7 +42,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.999
 	// Eta is the learning rate
-	Eta = .001
+	Eta = .0001
 )
 
 const (
