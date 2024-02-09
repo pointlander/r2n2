@@ -42,7 +42,7 @@ const (
 	// B2 exponential decay rate for the second-moment estimates
 	B2 = 0.999
 	// Eta is the learning rate
-	Eta = .00001
+	Eta = .001
 )
 
 const (
@@ -206,20 +206,6 @@ func Learn() {
 			w.X = w.X[:cap(w.X)]
 			continue
 		}
-		/*if w.N == "w2" {
-			factor := math.Sqrt(3)
-			for i := 0; i < cap(w.X); i++ {
-				x := rand.Intn(6)
-				if x == 0 {
-					w.X = append(w.X, float32(1*factor))
-				} else if x == 1 {
-					w.X = append(w.X, float32(-1*factor))
-				} else {
-					w.X = append(w.X, 0)
-				}
-			}
-			continue
-		}*/
 		factor := float32(math.Sqrt(float64(w.S[0])))
 		for i := 0; i < cap(w.X); i++ {
 			w.X = append(w.X, Random32(-1, 1)/factor)
@@ -521,20 +507,6 @@ func Learn2X() {
 			}
 			continue
 		}
-		/*if w.N == "w2" {
-			factor := math.Sqrt(3)
-			for i := 0; i < cap(w.X); i++ {
-				x := rand.Intn(6)
-				if x == 0 {
-					w.X = append(w.X, float32(1*factor))
-				} else if x == 1 {
-					w.X = append(w.X, float32(-1*factor))
-				} else {
-					w.X = append(w.X, 0)
-				}
-			}
-			continue
-		}*/
 		factor := float32(math.Sqrt(float64(w.S[0])))
 		for i := 0; i < cap(w.X); i++ {
 			w.X = append(w.X, Random32(-1, 1)/factor)
@@ -545,18 +517,19 @@ func Learn2X() {
 		}
 	}
 	{
-		deltas := make([][]float32, 0, len(set.Weights))
-		for _, p := range set.Weights {
-			deltas = append(deltas, make([]float32, len(p.X)))
+		pow := func(x float32) float32 {
+			y := math.Pow(float64(x), float64(1))
+			if math.IsNaN(y) || math.IsInf(y, 0) {
+				return 0
+			}
+			return float32(y)
 		}
-
 		rng := rand.New(rand.NewSource(1))
 		for i := range feedback.X {
 			feedback.X[i] = 0
 		}
 		feedback.Zero()
-		alpha, eta := float32(.9), float32(.1)
-		for i := 0; i < 128; i++ {
+		for i := 0; i < 256; i++ {
 			set.Zero()
 			inputs := make([]*tf32.V, 0, 8)
 			input := tf32.NewV(Symbols, 1)
@@ -605,25 +578,39 @@ func Learn2X() {
 				}
 			}
 			norm = float32(math.Sqrt(float64(norm)))
+			b1, b2 := pow(B1), pow(B2)
+			const Eta = .01
 			if norm > 1 {
 				scaling := 1 / norm
-				for k, p := range set.Weights {
-					if p.N != "w2" && p.N != "b2" && p.N != "w2d" && p.N != "b2d" {
+				for _, w := range set.Weights {
+					if w.N != "w2" && w.N != "b2" && w.N != "w2d" && w.N != "b2d" {
 						continue
 					}
-					for l, d := range p.D {
-						deltas[k][l] = alpha*deltas[k][l] - eta*d*scaling
-						p.X[l] += deltas[k][l]
+					for l, d := range w.D {
+						g := d * scaling
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
 			} else {
-				for k, p := range set.Weights {
-					if p.N != "w2" && p.N != "b2" && p.N != "w2d" && p.N != "b2d" {
+				for _, w := range set.Weights {
+					if w.N != "w2" && w.N != "b2" && w.N != "w2d" && w.N != "b2d" {
 						continue
 					}
-					for l, d := range p.D {
-						deltas[k][l] = alpha*deltas[k][l] - eta*d
-						p.X[l] += deltas[k][l]
+					for l, d := range w.D {
+						g := d
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
 			}
@@ -720,7 +707,6 @@ func Learn2X() {
 						mhat := m / (1 - b1)
 						vhat := v / (1 - b2)
 						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
-
 					}
 				}
 			}
