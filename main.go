@@ -145,6 +145,7 @@ func Graph(directory string) {
 			if err != nil {
 				panic(err)
 			}
+			fmt.Println(epoch, cost)
 			pair := Pair{
 				Epoch: epoch,
 				Cost:  cost,
@@ -623,8 +624,8 @@ func Learn2X() {
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
 	l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
 	l3a := tf32.CrossEntropy(tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
-	regularization := tf32.Add(tf32.Avg(tf32.Abs(set.Get("w3a"))), tf32.Avg(tf32.Abs(set.Get("b3a"))))
-	l3a = tf32.Add(l3a, regularization)
+	//regularization := tf32.Add(tf32.Avg(tf32.Abs(set.Get("w3a"))), tf32.Avg(tf32.Abs(set.Get("b3a"))))
+	//l3a = tf32.Add(l3a, regularization)
 
 	iterations := 100
 	points := make(plotter.XYs, 0, iterations)

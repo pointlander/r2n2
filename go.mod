@@ -13,7 +13,7 @@ require (
 	github.com/golang/protobuf v1.4.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pointlander/datum/bible v0.0.0-20200802052503-0ee610caba95 // indirect
-	github.com/pointlander/gradient v0.0.0-20230828203002-af1492b01f47 // indirect
+	github.com/pointlander/gradient v0.0.0-20240210181020-0da1e59a84fd // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	golang.org/x/image v0.11.0 // indirect
 	golang.org/x/text v0.12.0 // indirect
