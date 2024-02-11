@@ -38,9 +38,9 @@ const (
 	// Scale scales the neural network
 	Scale = 2
 	// B1 exponential decay of the rate for the first moment estimates
-	B1 = 0.9
+	B1 = 0.8
 	// B2 exponential decay rate for the second-moment estimates
-	B2 = 0.999
+	B2 = 0.89
 	// Eta is the learning rate
 	Eta = .0001
 )
@@ -145,6 +145,7 @@ func Graph(directory string) {
 			if err != nil {
 				panic(err)
 			}
+			fmt.Println(epoch, cost)
 			pair := Pair{
 				Epoch: epoch,
 				Cost:  cost,
@@ -179,6 +180,7 @@ func Graph(directory string) {
 
 // Learn learns the r2n2 model
 func Learn() {
+	rng := rand.New(rand.NewSource(1))
 	bible, err := bible.Load()
 	if err != nil {
 		panic(err)
@@ -208,7 +210,7 @@ func Learn() {
 		}
 		factor := float32(math.Sqrt(float64(w.S[0])))
 		for i := 0; i < cap(w.X); i++ {
-			w.X = append(w.X, Random32(-1, 1)/factor)
+			w.X = append(w.X, Random32(rng, -1, 1)/factor)
 		}
 	}
 	{
@@ -217,7 +219,6 @@ func Learn() {
 			deltas = append(deltas, make([]float32, len(p.X)))
 		}
 
-		rng := rand.New(rand.NewSource(1))
 		for i := range feedback.X {
 			feedback.X[i] = 0
 		}
@@ -313,7 +314,7 @@ func Learn() {
 	start := time.Now()
 	for i := 0; i < iterations; i++ {
 		for i := range verses {
-			j := i + rand.Intn(len(verses)-i)
+			j := i + rng.Intn(len(verses)-i)
 			verses[i], verses[j] = verses[j], verses[i]
 		}
 
@@ -472,6 +473,7 @@ func Inference() {
 
 // Learn2X learns 2X the r2n2 model
 func Learn2X() {
+	rng := rand.New(rand.NewSource(1))
 	bible, err := bible.Load()
 	if err != nil {
 		panic(err)
@@ -509,7 +511,7 @@ func Learn2X() {
 		}
 		factor := float32(math.Sqrt(float64(w.S[0])))
 		for i := 0; i < cap(w.X); i++ {
-			w.X = append(w.X, Random32(-1, 1)/factor)
+			w.X = append(w.X, Random32(rng, -1, 1)/factor)
 		}
 		w.States = make([][]float32, StateTotal)
 		for i := range w.States {
@@ -524,7 +526,6 @@ func Learn2X() {
 			}
 			return float32(y)
 		}
-		rng := rand.New(rand.NewSource(1))
 		for i := range feedback.X {
 			feedback.X[i] = 0
 		}
@@ -622,7 +623,7 @@ func Learn2X() {
 	l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
 	l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	l3a := tf32.Quadratic(tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
+	l3a := tf32.CrossEntropy(tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
 
 	iterations := 100
 	points := make(plotter.XYs, 0, iterations)
@@ -637,7 +638,7 @@ func Learn2X() {
 		}
 
 		for i := range verses {
-			j := i + rand.Intn(len(verses)-i)
+			j := i + rng.Intn(len(verses)-i)
 			verses[i], verses[j] = verses[j], verses[i]
 		}
 
@@ -690,6 +691,9 @@ func Learn2X() {
 						w.States[StateV][l] = v
 						mhat := m / (1 - b1)
 						vhat := v / (1 - b2)
+						if vhat < 0 {
+							vhat = 0
+						}
 						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
@@ -706,6 +710,9 @@ func Learn2X() {
 						w.States[StateV][l] = v
 						mhat := m / (1 - b1)
 						vhat := v / (1 - b2)
+						if vhat < 0 {
+							vhat = 0
+						}
 						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
@@ -778,7 +785,7 @@ func Inference2X() {
 		l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
 		l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, feedback.Meta())), set.Get("b2")))
 		l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-		l3a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+		l3a := tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
 		setSymbol := func(s rune) {
 			for i := range input.X {
 				input.X[i] = 0
@@ -814,7 +821,7 @@ func Inference2X() {
 	l1a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w1a"), l1), set.Get("b1a")))
 	l2 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w2"), tf32.Concat(l1a, initial.Meta())), set.Get("b2")))
 	//l3 := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3"), l2), set.Get("b3")))
-	//l3a := tf32.Sigmoid(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+	//l3a := tf32.Softmax(tf32.Add(tf32.Mul(set.Get("w3a"), l3), set.Get("b3a")))
 	for i := range in[:len(in)-1] {
 		for j := range input.X {
 			input.X[j] = 0
@@ -829,6 +836,6 @@ func Inference2X() {
 }
 
 // Random32 return a random float32
-func Random32(a, b float32) float32 {
+func Random32(rng *rand.Rand, a, b float32) float32 {
 	return (b-a)*rand.Float32() + a
 }
