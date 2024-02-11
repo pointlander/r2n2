@@ -936,17 +936,18 @@ func Learn2X64() {
 	set.Add("b3a", Symbols)
 	for i := range set.Weights {
 		w := set.Weights[i]
+		size := w.S[0] * w.S[1]
 		if strings.HasPrefix(w.N, "b") {
-			w.X = w.X[:cap(w.X)]
+			w.X = w.X[:size]
 			w.States = make([][]float64, StateTotal)
 			for i := range w.States {
 				w.States[i] = make([]float64, len(w.X))
 			}
 			continue
 		}
-		factor := math.Sqrt(float64(w.S[0]))
-		for i := 0; i < cap(w.X); i++ {
-			w.X = append(w.X, Random64(rng, -1, 1)/factor)
+		factor := math.Sqrt(2.0 / float64(w.S[0]))
+		for i := 0; i < size; i++ {
+			w.X = append(w.X, rng.NormFloat64()*factor)
 		}
 		w.States = make([][]float64, StateTotal)
 		for i := range w.States {
@@ -1271,9 +1272,4 @@ func Inference2X64() {
 // Random32 return a random float32
 func Random32(rng *rand.Rand, a, b float32) float32 {
 	return (b-a)*rand.Float32() + a
-}
-
-// Random64 return a random float64
-func Random64(rng *rand.Rand, a, b float64) float64 {
-	return (b-a)*rand.Float64() + a
 }
