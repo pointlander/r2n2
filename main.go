@@ -1086,6 +1086,10 @@ func Learn2X64() {
 				feedback.X[i] = 0
 			}
 			feedback.Zero()
+			for i := range feedbackcp.X {
+				feedbackcp.X[i] = 0
+			}
+			feedbackcp.Zero()
 			set.Zero()
 			cost := 0.0
 			for l, symbol := range verse[:len(verses[i].Verse)-1] {
