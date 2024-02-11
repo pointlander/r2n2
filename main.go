@@ -64,6 +64,8 @@ var (
 	FlagLearn = flag.String("learn", "", "learning mode")
 	// Flag2X use the 2X model
 	Flag2X = flag.Bool("2X", false, "learn the 2X model")
+	// Flag2X64 use the 64 bit 2X model
+	Flag2X64 = flag.Bool("2X64", false, "learn the 64 bit 2X model")
 	// FlagGraph graphs the model files
 	FlagGraph = flag.String("graph", "", "graph mode")
 	// FlagInference load weights and generate probable strings
@@ -77,6 +79,9 @@ func main() {
 		if *Flag2X {
 			Learn2X()
 			return
+		} else if *Flag2X64 {
+			Learn2X64()
+			return
 		}
 		Learn()
 		return
@@ -84,10 +89,17 @@ func main() {
 		if *Flag2X {
 			Inference2X()
 			return
+		} else if *Flag2X64 {
+			Inference2X64()
+			return
 		}
 		Inference()
 		return
 	} else if *FlagGraph != "" {
+		if *Flag2X64 {
+			Graph64(*FlagGraph)
+			return
+		}
 		Graph(*FlagGraph)
 		return
 	}
@@ -836,6 +848,62 @@ func Inference2X() {
 	search(0, in[len(in)-1:], &initial, 0)
 }
 
+// Graph64 graphs the 64 bit weight files
+func Graph64(directory string) {
+	input, err := os.Open(directory)
+	if err != nil {
+		panic(err)
+	}
+	defer input.Close()
+	type Pair struct {
+		Epoch int
+		Cost  float64
+	}
+	pairs := make(map[int]*Pair)
+	names, err := input.Readdirnames(-1)
+	if err != nil {
+		panic(err)
+	}
+	for _, name := range names {
+		if strings.HasSuffix(name, ".w") {
+			set := tf64.NewSet()
+			cost, epoch, err := set.Open(path.Join(directory, name))
+			if err != nil {
+				panic(err)
+			}
+			fmt.Println(epoch, cost)
+			pair := Pair{
+				Epoch: epoch,
+				Cost:  cost,
+			}
+			pairs[epoch] = &pair
+		}
+	}
+
+	points := make(plotter.XYs, 0, len(pairs))
+	for _, pair := range pairs {
+		points = append(points, plotter.XY{X: float64(pair.Epoch), Y: pair.Cost})
+	}
+	p := plot.New()
+
+	p.Title.Text = "epochs vs cost"
+	p.X.Label.Text = "epochs"
+	p.Y.Label.Text = "cost"
+
+	scatter, err := plotter.NewScatter(points)
+	if err != nil {
+		panic(err)
+	}
+	scatter.GlyphStyle.Radius = vg.Length(1)
+	scatter.GlyphStyle.Shape = draw.CircleGlyph{}
+	p.Add(scatter)
+
+	err = p.Save(8*vg.Inch, 8*vg.Inch, "epochs.png")
+	if err != nil {
+		panic(err)
+	}
+}
+
 // Learn2X64 learns 64bit 2X the r2n2 model
 func Learn2X64() {
 	rng := rand.New(rand.NewSource(1))
@@ -1120,6 +1188,84 @@ func Learn2X64() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// Inference2X64 inference 64 bit 2X r2n2 model
+func Inference2X64() {
+	set := tf64.NewSet()
+	cost, epoch, err := set.Open(*FlagInference)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(cost, epoch)
+	bestSum, best := 0.0, []rune{}
+	var search func(depth int, most []rune, previous *tf64.V, sum float64)
+	search = func(depth int, most []rune, previous *tf64.V, sum float64) {
+		if depth > 2 {
+			if sum > bestSum {
+				best, bestSum = most, sum
+				fmt.Println(best)
+				fmt.Println(string(best))
+			}
+			return
+		}
+
+		input, feedback := tf64.NewV(Symbols, 1), tf64.NewV(Space, 1)
+		input.X = input.X[:cap(input.X)]
+		feedback.X = feedback.X[:cap(feedback.X)]
+		copy(feedback.X, previous.X)
+		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+		l1a := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+		l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
+		l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
+		l3a := tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+		setSymbol := func(s rune) {
+			for i := range input.X {
+				input.X[i] = 0
+			}
+			symbol := int(s)
+			input.X[symbol] = 1
+		}
+		setSymbol(most[len(most)-1])
+		next := tf64.NewV(Space, 1)
+		next.X = next.X[:cap(next.X)]
+		l2(func(a *tf64.V) bool {
+			copy(next.X, a.X)
+			return true
+		})
+		l3a(func(a *tf64.V) bool {
+			symbols := a.X
+			for i, symbol := range symbols {
+				cp := make([]rune, len(most))
+				copy(cp, most)
+				cp = append(cp, rune(i))
+				search(depth+1, cp, &next, sum+symbol)
+			}
+			return true
+		})
+	}
+	in := []rune{'^', 'T'}
+	input := tf64.NewV(Space, 1)
+	input.X = input.X[:cap(input.X)]
+	initial := tf64.NewV(Space, 1)
+	initial.X = initial.X[:cap(initial.X)]
+
+	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+	l1a := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+	l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, initial.Meta())), set.Get("b2")))
+	//l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
+	//l3a := tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+	for i := range in[:len(in)-1] {
+		for j := range input.X {
+			input.X[j] = 0
+		}
+		input.X[int(in[i])] = 1
+		l2(func(a *tf64.V) bool {
+			copy(initial.X, a.X)
+			return true
+		})
+	}
+	search(0, in[len(in)-1:], &initial, 0)
 }
 
 // Random32 return a random float32
