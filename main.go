@@ -693,6 +693,9 @@ func Learn2X() {
 						w.States[StateV][l] = v
 						mhat := m / (1 - b1)
 						vhat := v / (1 - b2)
+						if vhat < 0 {
+							vhat = 0
+						}
 						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
@@ -709,6 +712,9 @@ func Learn2X() {
 						w.States[StateV][l] = v
 						mhat := m / (1 - b1)
 						vhat := v / (1 - b2)
+						if vhat < 0 {
+							vhat = 0
+						}
 						w.X[l] -= Eta * mhat / (float32(math.Sqrt(float64(vhat))) + 1e-8)
 					}
 				}
