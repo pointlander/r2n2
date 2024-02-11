@@ -22,6 +22,7 @@ import (
 
 	"github.com/pointlander/datum/bible"
 	"github.com/pointlander/gradient/tf32"
+	"github.com/pointlander/gradient/tf64"
 )
 
 const (
@@ -835,7 +836,298 @@ func Inference2X() {
 	search(0, in[len(in)-1:], &initial, 0)
 }
 
+// Learn2X64 learns 64bit 2X the r2n2 model
+func Learn2X64() {
+	rng := rand.New(rand.NewSource(1))
+	bible, err := bible.Load()
+	if err != nil {
+		panic(err)
+	}
+	verses := bible.GetVerses()
+
+	input := tf64.NewV(Symbols, 1)
+	input.X = input.X[:cap(input.X)]
+	output := tf64.NewV(Symbols, 1)
+	output.X = output.X[:cap(output.X)]
+	feedback := tf64.NewV(Space, 1)
+	feedback.X = feedback.X[:cap(feedback.X)]
+	set := tf64.NewSet()
+	set.Add("w1", Symbols, Symbols)
+	set.Add("b1", Symbols)
+	set.Add("w1a", Symbols, Symbols)
+	set.Add("b1a", Symbols)
+	set.Add("w2", Width, Space)
+	set.Add("b2", Space)
+	set.Add("w2d", Space, Width)
+	set.Add("b2d", Width)
+	set.Add("w3", Space, Space)
+	set.Add("b3", Space)
+	set.Add("w3a", Space, Symbols)
+	set.Add("b3a", Symbols)
+	for i := range set.Weights {
+		w := set.Weights[i]
+		if strings.HasPrefix(w.N, "b") {
+			w.X = w.X[:cap(w.X)]
+			w.States = make([][]float64, StateTotal)
+			for i := range w.States {
+				w.States[i] = make([]float64, len(w.X))
+			}
+			continue
+		}
+		factor := math.Sqrt(float64(w.S[0]))
+		for i := 0; i < cap(w.X); i++ {
+			w.X = append(w.X, Random64(rng, -1, 1)/factor)
+		}
+		w.States = make([][]float64, StateTotal)
+		for i := range w.States {
+			w.States[i] = make([]float64, len(w.X))
+		}
+	}
+	{
+		pow := func(x float64) float64 {
+			y := math.Pow(x, 1.0)
+			if math.IsNaN(y) || math.IsInf(y, 0) {
+				return 0
+			}
+			return y
+		}
+		for i := range feedback.X {
+			feedback.X[i] = 0
+		}
+		feedback.Zero()
+		for i := 0; i < 256; i++ {
+			set.Zero()
+			inputs := make([]*tf64.V, 0, 8)
+			input := tf64.NewV(Symbols, 1)
+			input.X = input.X[:cap(input.X)]
+			for i := range input.X {
+				e := math.Exp(rng.NormFloat64())
+				input.X[i] = e / (e + 1)
+			}
+			inputs = append(inputs, &input)
+			l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
+				tf64.Concat(input.Meta(), feedback.Meta())), set.Get("b2")))
+			length := rng.Intn(32) + 1
+			for j := 0; j < length; j++ {
+				input := tf64.NewV(Symbols, 1)
+				input.X = input.X[:cap(input.X)]
+				for i := range input.X {
+					e := math.Exp(rng.NormFloat64())
+					input.X[i] = e / (e + 1)
+				}
+				inputs = append(inputs, &input)
+				l1 = tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
+					tf64.Concat(input.Meta(), l1)), set.Get("b2")))
+			}
+			x := 0
+			y := Symbols
+			z := Width
+			options := map[string]interface{}{
+				"begin": &x,
+				"end":   &y,
+			}
+			options1 := map[string]interface{}{
+				"begin": &y,
+				"end":   &z,
+			}
+			l1d := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"), l1), set.Get("b2d")))
+			cost := tf64.Avg(tf64.Quadratic(tf64.Slice(l1d, options), inputs[0].Meta()))
+			for j := 0; j < length; j++ {
+				l1d = tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"), tf64.Slice(l1d, options1)), set.Get("b2d")))
+				cost = tf64.Add(cost, tf64.Avg(tf64.Quadratic(tf64.Slice(l1d, options), inputs[j+1].Meta())))
+			}
+			total := tf64.Gradient(cost).X[0]
+			norm := 0.0
+			for _, p := range set.Weights {
+				for _, d := range p.D {
+					norm += d * d
+				}
+			}
+			norm = math.Sqrt(norm)
+			b1, b2 := pow(B1), pow(B2)
+			const Eta = .01
+			if norm > 1 {
+				scaling := 1 / norm
+				for _, w := range set.Weights {
+					if w.N != "w2" && w.N != "b2" && w.N != "w2d" && w.N != "b2d" {
+						continue
+					}
+					for l, d := range w.D {
+						g := d * scaling
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
+					}
+				}
+			} else {
+				for _, w := range set.Weights {
+					if w.N != "w2" && w.N != "b2" && w.N != "w2d" && w.N != "b2d" {
+						continue
+					}
+					for l, d := range w.D {
+						g := d
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
+					}
+				}
+			}
+			fmt.Println("pre", length, total/float64(length))
+		}
+	}
+
+	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+	l1a := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+	l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
+	l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l3a := tf64.CrossEntropy(tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
+
+	iterations := 100
+	points := make(plotter.XYs, 0, iterations)
+	start := time.Now()
+	for i := 0; i < iterations; i++ {
+		pow := func(x float64) float64 {
+			y := math.Pow(x, float64(i+1))
+			if math.IsNaN(y) || math.IsInf(y, 0) {
+				return 0
+			}
+			return y
+		}
+
+		for i := range verses {
+			j := i + rng.Intn(len(verses)-i)
+			verses[i], verses[j] = verses[j], verses[i]
+		}
+
+		total := 0.0
+		for i := 0; i < len(verses); i++ {
+			verse := "^" + verses[i].Verse + "$"
+			for i := range feedback.X {
+				feedback.X[i] = 0
+			}
+			feedback.Zero()
+			set.Zero()
+			cost := 0.0
+			for l, symbol := range verse[:len(verses[i].Verse)-1] {
+				for i := range input.X {
+					input.X[i] = 0
+				}
+				input.Zero()
+				input.X[int(symbol)] = 1
+				for i := range output.X {
+					output.X[i] = 0
+				}
+				output.Zero()
+				output.X[int(verse[l+1])] = 1
+				cost += tf64.Gradient(l3a).X[0]
+
+				l2(func(a *tf64.V) bool {
+					copy(feedback.X, a.X)
+					return true
+				})
+			}
+			norm := 0.0
+			for _, p := range set.Weights {
+				for _, d := range p.D {
+					norm += d * d
+				}
+			}
+			norm = math.Sqrt(norm)
+			b1, b2 := pow(B1), pow(B2)
+			if norm > 1 {
+				scaling := 1 / norm
+				for _, w := range set.Weights {
+					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
+						continue
+					}
+					for l, d := range w.D {
+						g := d * scaling
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						if vhat < 0 {
+							vhat = 0
+						}
+						w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
+					}
+				}
+			} else {
+				for _, w := range set.Weights {
+					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
+						continue
+					}
+					for l, d := range w.D {
+						g := d
+						m := B1*w.States[StateM][l] + (1-B1)*g
+						v := B2*w.States[StateV][l] + (1-B2)*g*g
+						w.States[StateM][l] = m
+						w.States[StateV][l] = v
+						mhat := m / (1 - b1)
+						vhat := v / (1 - b2)
+						if vhat < 0 {
+							vhat = 0
+						}
+						w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
+					}
+				}
+			}
+			cost /= float64(len(verses[i].Verse))
+			total += cost
+			fmt.Println(cost)
+		}
+		fmt.Printf("\n")
+
+		err := set.Save(fmt.Sprintf("weights_%d.w", i), total, i)
+		if err != nil {
+			panic(err)
+		}
+
+		fmt.Println(i, total, time.Now().Sub(start))
+		start = time.Now()
+		points = append(points, plotter.XY{X: float64(i), Y: float64(total)})
+		if total < .001 {
+			fmt.Println("stopping...")
+			break
+		}
+	}
+
+	p := plot.New()
+
+	p.Title.Text = "epochs vs cost"
+	p.X.Label.Text = "epochs"
+	p.Y.Label.Text = "cost"
+
+	scatter, err := plotter.NewScatter(points)
+	if err != nil {
+		panic(err)
+	}
+	scatter.GlyphStyle.Radius = vg.Length(1)
+	scatter.GlyphStyle.Shape = draw.CircleGlyph{}
+	p.Add(scatter)
+
+	err = p.Save(8*vg.Inch, 8*vg.Inch, "epochs.png")
+	if err != nil {
+		panic(err)
+	}
+}
+
 // Random32 return a random float32
 func Random32(rng *rand.Rand, a, b float32) float32 {
 	return (b-a)*rand.Float32() + a
+}
+
+// Random64 return a random float64
+func Random64(rng *rand.Rand, a, b float64) float64 {
+	return (b-a)*rand.Float64() + a
 }
