@@ -48,6 +48,8 @@ github.com/pointlander/gradient v0.0.0-20240210181020-0da1e59a84fd h1:kR5rkYet7n
 github.com/pointlander/gradient v0.0.0-20240210181020-0da1e59a84fd/go.mod h1:gVxcVB9oJ9tPTLxBB4mLnZ7gQ3tRdkLxr0v7WPkahJ8=
 github.com/pointlander/gradient v0.0.0-20240211025102-4fcff0f3ad3a h1:/XiGgIc16W7dA5NykiAWd05JMAY4EAxoeXMigoVHVHw=
 github.com/pointlander/gradient v0.0.0-20240211025102-4fcff0f3ad3a/go.mod h1:gVxcVB9oJ9tPTLxBB4mLnZ7gQ3tRdkLxr0v7WPkahJ8=
+github.com/pointlander/gradient v0.0.0-20240211154632-48c5163789ca h1:p61F5GIkEIuALh4zlSmIamvOhHI2XL7YUFSamGcQq/I=
+github.com/pointlander/gradient v0.0.0-20240211154632-48c5163789ca/go.mod h1:gVxcVB9oJ9tPTLxBB4mLnZ7gQ3tRdkLxr0v7WPkahJ8=
 github.com/prometheus/client_model v0.0.0-20190812154241-14fe0d1b01d4/go.mod h1:xMI15A0UPsDsEKsMN9yxemIoYk6Tm2C1GtYGdfGttqA=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=

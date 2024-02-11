@@ -919,6 +919,8 @@ func Learn2X64() {
 	output.X = output.X[:cap(output.X)]
 	feedback := tf64.NewV(Space, 1)
 	feedback.X = feedback.X[:cap(feedback.X)]
+	feedbackcp := tf64.NewV(Space, 1)
+	feedbackcp.X = feedbackcp.X[:cap(feedbackcp.X)]
 	set := tf64.NewSet()
 	set.Add("w1", Symbols, Symbols)
 	set.Add("b1", Symbols)
@@ -1054,7 +1056,8 @@ func Learn2X64() {
 
 	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 	l1a := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a")))
-	l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
+	l2 := tf64.Copy(feedbackcp.Meta(),
+		tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2"))))
 	l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
 	l3a := tf64.CrossEntropy(tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
 
@@ -1097,10 +1100,7 @@ func Learn2X64() {
 				output.X[int(verse[l+1])] = 1
 				cost += tf64.Gradient(l3a).X[0]
 
-				l2(func(a *tf64.V) bool {
-					copy(feedback.X, a.X)
-					return true
-				})
+				copy(feedback.X, feedbackcp.X)
 			}
 			norm := 0.0
 			for _, p := range set.Weights {
