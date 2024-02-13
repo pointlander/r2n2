@@ -1056,7 +1056,7 @@ func Learn2X64() {
 	}
 
 	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
-	l1a := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 	l2 := tf64.Copy(feedbackcp.Meta(),
 		tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2"))))
 	l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
@@ -1220,7 +1220,7 @@ func Inference2X64() {
 		feedback.X = feedback.X[:cap(feedback.X)]
 		copy(feedback.X, previous.X)
 		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
-		l1a := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+		l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 		l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
 		l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
 		l3a := tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")))
@@ -1256,7 +1256,7 @@ func Inference2X64() {
 	initial.X = initial.X[:cap(initial.X)]
 
 	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
-	l1a := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a")))
+	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 	l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, initial.Meta())), set.Get("b2")))
 	//l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
 	//l3a := tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")))
