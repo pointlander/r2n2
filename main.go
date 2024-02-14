@@ -12,6 +12,7 @@ import (
 	"os"
 	"path"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -80,7 +81,7 @@ func main() {
 			Learn2X()
 			return
 		} else if *Flag2X64 {
-			Learn2X64()
+			Learn2X64(*FlagLearn)
 			return
 		}
 		Learn()
@@ -905,8 +906,12 @@ func Graph64(directory string) {
 }
 
 // Learn2X64 learns 64bit 2X the r2n2 model
-func Learn2X64() {
-	rng := rand.New(rand.NewSource(1))
+func Learn2X64(name string) {
+	seed, err := strconv.Atoi(name)
+	if err != nil {
+		panic(err)
+	}
+	rng := rand.New(rand.NewSource(int64(seed) + 1))
 	bible, err := bible.Load()
 	if err != nil {
 		panic(err)
@@ -1161,7 +1166,7 @@ func Learn2X64() {
 		}
 		fmt.Printf("\n")
 
-		err := set.Save(fmt.Sprintf("weights_%d.w", i), total, i)
+		err := set.Save(fmt.Sprintf("weights_%d_%d.w", seed, i), total, i)
 		if err != nil {
 			panic(err)
 		}
