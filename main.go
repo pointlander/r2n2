@@ -1209,94 +1209,58 @@ func Inference2X64() {
 		panic(err)
 	}
 	fmt.Println(cost, epoch)
-	initial := tf64.NewV(Space, 1)
-	initial.X = initial.X[:cap(initial.X)]
-	bestSum, best := 0.0, []rune{}
-	var search func(depth int, most []rune, previous *tf64.V, sum float64)
-	search = func(depth int, most []rune, previous *tf64.V, sum float64) {
-		if depth > 1 {
-			if sum > bestSum {
-				best, bestSum = most, sum
-				initial = *previous
-				//fmt.Println(best)
-				//fmt.Println(string(best))
-			}
-			return
-		}
-
-		input, feedback := tf64.NewV(Symbols, 1), tf64.NewV(Space, 1)
-		input.X = input.X[:cap(input.X)]
-		feedback.X = feedback.X[:cap(feedback.X)]
-		copy(feedback.X, previous.X)
-		t := .5
-		temp := tf64.NewV(Symbols, 1)
-		for i := 0; i < Symbols; i++ {
-			temp.X = append(temp.X, 1/t)
-		}
-		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
-		l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
-		l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
-		l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
-		l3a := tf64.Softmax(tf64.Hadamard(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")), temp.Meta()))
-		setSymbol := func(s rune) {
-			for i := range input.X {
-				input.X[i] = 0
-			}
-			symbol := int(s)
-			input.X[symbol] = 1
-		}
-		setSymbol(most[len(most)-1])
-		next := tf64.NewV(Space, 1)
-		next.X = next.X[:cap(next.X)]
-		l2(func(a *tf64.V) bool {
-			copy(next.X, a.X)
-			return true
-		})
-		selected, sum := rng.Float64(), 0.0
-		l3a(func(a *tf64.V) bool {
-			symbols := a.X
-			for i, symbol := range symbols {
-				sum += symbol
-				if sum > selected {
-					cp := make([]rune, len(most))
-					copy(cp, most)
-					cp = append(cp, rune(i))
-					best, bestSum = cp, sum
-					initial = next
-					//search(depth+1, cp, &next, sum+symbol)
-					break
-				}
-			}
-			return true
-		})
-	}
-	in := []rune{'^', 'L', 'O', 'R'}
+	in := []rune{'^'}
 	input := tf64.NewV(Space, 1)
 	input.X = input.X[:cap(input.X)]
+	feedback := tf64.NewV(Space, 1)
+	feedback.X = feedback.X[:cap(feedback.X)]
+
+	t := .5
+	temp := tf64.NewV(Symbols, 1)
+	for i := 0; i < Symbols; i++ {
+		temp.X = append(temp.X, 1/t)
+	}
 
 	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
-	l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, initial.Meta())), set.Get("b2")))
-	//l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
-	//l3a := tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+	l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
+	l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l3a := tf64.Softmax(tf64.Hadamard(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")), temp.Meta()))
 	for i := range in[:len(in)-1] {
 		for j := range input.X {
 			input.X[j] = 0
 		}
 		input.X[int(in[i])] = 1
 		l2(func(a *tf64.V) bool {
-			copy(initial.X, a.X)
+			copy(feedback.X, a.X)
 			return true
 		})
 	}
-	acc := []rune{}
 	for i := 0; i < 128; i++ {
-		acc = append(acc, in[:len(in)-1]...)
-		search(0, in[len(in)-1:], &initial, 0)
-		in, bestSum = best, 0
-		fmt.Println(acc)
-		fmt.Println(string(acc))
+		selected, sum := rng.Float64(), 0.0
+		for j := range input.X {
+			input.X[j] = 0
+		}
+		input.X[int(in[len(in)-1])] = 1
+		var symbolsX []float64
+		l3a(func(a *tf64.V) bool {
+			symbolsX = a.X
+			return true
+		})
+		l2(func(a *tf64.V) bool {
+			copy(feedback.X, a.X)
+			return true
+		})
+		for x, v := range symbolsX {
+			sum += v
+			if sum > selected {
+				in = append(in, rune(x))
+				break
+			}
+		}
 	}
+	fmt.Println(in)
+	fmt.Println(string(in))
 }
 
 // Random32 return a random float32
