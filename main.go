@@ -1228,11 +1228,16 @@ func Inference2X64() {
 		input.X = input.X[:cap(input.X)]
 		feedback.X = feedback.X[:cap(feedback.X)]
 		copy(feedback.X, previous.X)
+		t := .5
+		temp := tf64.NewV(Symbols, 1)
+		for i := 0; i < Symbols; i++ {
+			temp.X = append(temp.X, 1/t)
+		}
 		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 		l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 		l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
 		l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
-		l3a := tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")))
+		l3a := tf64.Softmax(tf64.Hadamard(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")), temp.Meta()))
 		setSymbol := func(s rune) {
 			for i := range input.X {
 				input.X[i] = 0
@@ -1256,14 +1261,16 @@ func Inference2X64() {
 					cp := make([]rune, len(most))
 					copy(cp, most)
 					cp = append(cp, rune(i))
-					search(depth+1, cp, &next, sum+symbol)
+					best, bestSum = cp, sum
+					initial = next
+					//search(depth+1, cp, &next, sum+symbol)
 					break
 				}
 			}
 			return true
 		})
 	}
-	in := []rune{'^'}
+	in := []rune{'^', 'L', 'O', 'R'}
 	input := tf64.NewV(Space, 1)
 	input.X = input.X[:cap(input.X)]
 
@@ -1283,7 +1290,7 @@ func Inference2X64() {
 		})
 	}
 	acc := []rune{}
-	for i := 0; i < 80; i++ {
+	for i := 0; i < 128; i++ {
 		acc = append(acc, in[:len(in)-1]...)
 		search(0, in[len(in)-1:], &initial, 0)
 		in, bestSum = best, 0
