@@ -1202,20 +1202,24 @@ func Learn2X64(name string) {
 
 // Inference2X64 inference 64 bit 2X r2n2 model
 func Inference2X64() {
+	rng := rand.New(rand.NewSource(1))
 	set := tf64.NewSet()
 	cost, epoch, err := set.Open(*FlagInference)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Println(cost, epoch)
+	initial := tf64.NewV(Space, 1)
+	initial.X = initial.X[:cap(initial.X)]
 	bestSum, best := 0.0, []rune{}
 	var search func(depth int, most []rune, previous *tf64.V, sum float64)
 	search = func(depth int, most []rune, previous *tf64.V, sum float64) {
-		if depth > 2 {
+		if depth > 1 {
 			if sum > bestSum {
 				best, bestSum = most, sum
-				fmt.Println(best)
-				fmt.Println(string(best))
+				initial = *previous
+				//fmt.Println(best)
+				//fmt.Println(string(best))
 			}
 			return
 		}
@@ -1243,22 +1247,25 @@ func Inference2X64() {
 			copy(next.X, a.X)
 			return true
 		})
+		selected, sum := rng.Float64(), 0.0
 		l3a(func(a *tf64.V) bool {
 			symbols := a.X
 			for i, symbol := range symbols {
-				cp := make([]rune, len(most))
-				copy(cp, most)
-				cp = append(cp, rune(i))
-				search(depth+1, cp, &next, sum+symbol)
+				sum += symbol
+				if sum > selected {
+					cp := make([]rune, len(most))
+					copy(cp, most)
+					cp = append(cp, rune(i))
+					search(depth+1, cp, &next, sum+symbol)
+					break
+				}
 			}
 			return true
 		})
 	}
-	in := []rune{'^', 'T'}
+	in := []rune{'^'}
 	input := tf64.NewV(Space, 1)
 	input.X = input.X[:cap(input.X)]
-	initial := tf64.NewV(Space, 1)
-	initial.X = initial.X[:cap(initial.X)]
 
 	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
@@ -1275,7 +1282,14 @@ func Inference2X64() {
 			return true
 		})
 	}
-	search(0, in[len(in)-1:], &initial, 0)
+	acc := []rune{}
+	for i := 0; i < 80; i++ {
+		acc = append(acc, in[:len(in)-1]...)
+		search(0, in[len(in)-1:], &initial, 0)
+		in, bestSum = best, 0
+		fmt.Println(acc)
+		fmt.Println(string(acc))
+	}
 }
 
 // Random32 return a random float32
