@@ -24,6 +24,7 @@ import (
 	"github.com/pointlander/datum/bible"
 	"github.com/pointlander/gradient/tf32"
 	"github.com/pointlander/gradient/tf64"
+	"github.com/pointlander/matrix"
 )
 
 const (
@@ -1273,10 +1274,24 @@ func Inference2X64() {
 				return true
 			})
 		}
-		for j := 0; j < Symbols; j++ {
-			for _, s := range symbols {
-				sum += s[j] / float64(len(symbols))
+		router := matrix.NewMatrix(Symbols, len(nets))
+		for _, symbol := range symbols {
+			for _, s := range symbol {
+				router.Data = append(router.Data, float32(s))
 			}
+		}
+		entropy := matrix.SelfEntropy(router, router, router)
+		index, min := 0, float32(math.MaxFloat32)
+		for i, e := range entropy {
+			if e < min {
+				index, min = i, e
+			}
+		}
+		for j := 0; j < Symbols; j++ {
+			/*for _, s := range symbols {
+				sum += s[j] / float64(len(symbols))
+			}*/
+			sum += symbols[index][j]
 			if sum > selected {
 				in = append(in, rune(j))
 				break

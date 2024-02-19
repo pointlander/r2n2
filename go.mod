@@ -14,6 +14,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/pointlander/datum/bible v0.0.0-20200802052503-0ee610caba95 // indirect
 	github.com/pointlander/gradient v0.0.0-20240213232956-e1e6b99a9ea9 // indirect
+	github.com/pointlander/matrix v0.0.0-20240205004533-5771ef1bc2f1 // indirect
 	github.com/ziutek/blas v0.0.0-20190227122918-da4ca23e90bb // indirect
 	golang.org/x/image v0.11.0 // indirect
 	golang.org/x/text v0.12.0 // indirect
