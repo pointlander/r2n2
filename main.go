@@ -68,6 +68,8 @@ var (
 	Flag2X = flag.Bool("2X", false, "learn the 2X model")
 	// Flag2X64 use the 64 bit 2X model
 	Flag2X64 = flag.Bool("2X64", false, "learn the 64 bit 2X model")
+	// Flag2X64SE use the 64 bit self entropy 2X model
+	Flag2X64SE = flag.Bool("2X64SE", false, "learn the 64 bit self entropy 2X model")
 	// FlagGraph graphs the model files
 	FlagGraph = flag.String("graph", "", "graph mode")
 	// FlagInference load weights and generate probable strings
@@ -93,6 +95,9 @@ func main() {
 			return
 		} else if *Flag2X64 {
 			Inference2X64()
+			return
+		} else if *Flag2X64SE {
+			Inference2X64SE()
 			return
 		}
 		Inference()
@@ -1300,6 +1305,93 @@ func Inference2X64() {
 	}
 	fmt.Println(in)
 	fmt.Println(string(in))
+}
+
+// Inference2X64SE inference 64 bit self entropy 2X r2n2 model
+func Inference2X64SE() {
+	in := []rune{'^'}
+	set := tf64.NewSet()
+	name := *FlagInference
+	cost, epoch, err := set.Open(name)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(name, cost, epoch)
+	input := tf64.NewV(Space, 1)
+	input.X = input.X[:cap(input.X)]
+	feedback := tf64.NewV(Space, 1)
+	feedback.X = feedback.X[:cap(feedback.X)]
+
+	t := 1.0
+	temp := tf64.NewV(Symbols, 1)
+	for i := 0; i < Symbols; i++ {
+		temp.X = append(temp.X, 1/t)
+	}
+
+	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
+	l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
+	l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l3a := tf64.Softmax(tf64.Hadamard(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")), temp.Meta()))
+	symbols := make([][]float64, 0, 8)
+	for i := range in {
+		for j := range input.X {
+			input.X[j] = 0
+		}
+		input.X[int(in[i])] = 1
+		l3a(func(a *tf64.V) bool {
+			symbols = append(symbols, a.X)
+			return true
+		})
+		l2(func(a *tf64.V) bool {
+			copy(feedback.X, a.X)
+			return true
+		})
+	}
+	for i := 0; i < 256; i++ {
+		context := matrix.NewMatrix(Symbols, len(symbols)+1)
+		for _, symbol := range symbols {
+			for _, s := range symbol {
+				context.Data = append(context.Data, float32(s))
+			}
+		}
+		for j := 0; j < 256; j++ {
+			context.Data = append(context.Data, 0)
+		}
+		symbol, min, best := 0, math.MaxFloat64, []float64{}
+		for s := 0; s < 256; s++ {
+			for j := range input.X {
+				input.X[j] = 0
+			}
+			input.X[int(s)] = 1
+			l3a(func(a *tf64.V) bool {
+				dst := context.Data[256*len(symbols):]
+				for i := range dst {
+					dst[i] = float32(a.X[i])
+				}
+				entropy := matrix.SelfEntropy(context, context, context)
+				sum := 0.0
+				for _, e := range entropy {
+					sum += float64(e)
+				}
+				if sum < min {
+					symbol, min, best = s, sum, a.X
+				}
+				return true
+			})
+		}
+		for j := range input.X {
+			input.X[j] = 0
+		}
+		input.X[int(symbol)] = 1
+		l2(func(a *tf64.V) bool {
+			copy(feedback.X, a.X)
+			return true
+		})
+		in = append(in, rune(symbol))
+		symbols = append(symbols, best)
+		fmt.Println(string(in))
+	}
 }
 
 // Random32 return a random float32
