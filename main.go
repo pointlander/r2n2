@@ -51,6 +51,8 @@ var (
 	Flag2X64 = flag.Bool("2X64", false, "learn the 64 bit 2X model")
 	// Flag2X64SE use the 64 bit self entropy 2X model
 	Flag2X64SE = flag.Bool("2X64SE", false, "learn the 64 bit self entropy 2X model")
+	// FlagX64SA learn 64 bit self attention model
+	FlagX64SA = flag.Bool("X64SA", false, "learn 64 bit self attention model")
 	// FlagGraph graphs the model files
 	FlagGraph = flag.String("graph", "", "graph mode")
 	// FlagInference load weights and generate probable strings
@@ -66,6 +68,9 @@ func main() {
 			return
 		} else if *Flag2X64 {
 			Learn2X64(*FlagLearn)
+			return
+		} else if *FlagX64SA {
+			LearnX64SA(*FlagLearn)
 			return
 		}
 		Learn()
