@@ -20,7 +20,9 @@ import (
 // LearnX64SA learns 64 bit self attention r2n2 model
 func LearnX64SA(name string) {
 	const (
-		Eta = .001
+		B1  = 0.7
+		B2  = 0.79
+		Eta = .0001
 	)
 
 	seed, err := strconv.Atoi(name)
@@ -77,7 +79,7 @@ func LearnX64SA(name string) {
 	}
 
 	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), in.Meta()), set.Get("b1")))
-	l2 := tf64.CrossEntropy(tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w2"), l1), set.Get("b2"))), out.Meta())
+	l2 := tf64.Avg(tf64.CrossEntropy(tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w2"), l1), set.Get("b2"))), out.Meta()))
 
 	iterations := 100
 	for i := 0; i < iterations; i++ {
@@ -115,7 +117,7 @@ func LearnX64SA(name string) {
 				q := matrix.MulT(x1, input)
 				k := matrix.MulT(x2, input)
 				v := matrix.MulT(x3, input)
-				output := matrix.SelfAttention(q, k, v)
+				output := matrix.Sigmoid(matrix.SelfAttention(q, k, v))
 				for j := 0; j < 3; j++ {
 					copy(input.Data[j*Width+Symbols:], output.Data[j*Space:(j+1)*Space])
 				}
