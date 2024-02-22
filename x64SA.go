@@ -187,3 +187,80 @@ func LearnX64SA(name string) {
 		fmt.Println(i, total, time.Now().Sub(start))
 	}
 }
+
+// InferenceX64SA inference 64 bit self attention r2n2 model
+func InferenceX64SA() {
+	rng := rand.New(rand.NewSource(int64(0) + 1))
+	generated := []rune{'^'}
+
+	factor := math.Sqrt(2.0 / float64(Width))
+	x1 := matrix.NewMatrix(Width, Space)
+	x2 := matrix.NewMatrix(Width, Space)
+	x3 := matrix.NewMatrix(Width, Space)
+	for i := 0; i < x1.Size(); i++ {
+		x1.Data = append(x1.Data, float32(rng.NormFloat64()*factor))
+		x2.Data = append(x2.Data, float32(rng.NormFloat64()*factor))
+		x3.Data = append(x3.Data, float32(rng.NormFloat64()*factor))
+	}
+
+	in := tf64.NewV(Space, 3)
+	in.X = in.X[:cap(in.X)]
+	out := tf64.NewV(Symbols, 3)
+	out.X = out.X[:cap(out.X)]
+
+	name := *FlagInference
+	set := tf64.NewSet()
+	cost, epoch, err := set.Open(name)
+	if err != nil {
+		panic(err)
+	}
+	fmt.Println(name, cost, epoch)
+
+	t := 2.0
+	temp := tf64.NewV(Symbols, 1)
+	for i := 0; i < Symbols; i++ {
+		temp.X = append(temp.X, 1/t)
+	}
+
+	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), in.Meta()), set.Get("b1")))
+	l2 := tf64.Softmax(tf64.Hadamard(tf64.Add(tf64.Mul(set.Get("w2"), l1), set.Get("b2")), temp.Meta()))
+
+	input := matrix.NewZeroMatrix(Width, 3)
+	for i := 0; i < 256; i++ {
+		symbol := generated[len(generated)-1]
+		for j := 0; j < 3; j++ {
+			for k := 0; k < Symbols; k++ {
+				input.Data[j*Width+k] = 0
+			}
+		}
+		input.Data[symbol] = 1
+		input.Data[Width+symbol] = 1
+		input.Data[2*Width+symbol] = 1
+		q := matrix.MulT(x1, input)
+		k := matrix.MulT(x2, input)
+		v := matrix.MulT(x3, input)
+		output := matrix.Sigmoid(matrix.SelfAttention(q, k, v))
+		for j := 0; j < 3; j++ {
+			copy(input.Data[j*Width+Symbols:], output.Data[j*Space:(j+1)*Space])
+		}
+
+		for j := range in.X {
+			in.X[j] = float64(output.Data[j])
+		}
+
+		l2(func(a *tf64.V) bool {
+			selected, sum := rng.Float64(), 0.0
+			for j := 0; j < Symbols; j++ {
+				for k := 0; k < 3; k++ {
+					sum += a.X[k*Symbols+j] / 3.0
+				}
+				if selected < sum {
+					generated = append(generated, rune(j))
+					break
+				}
+			}
+			return true
+		})
+		fmt.Println(string(generated))
+	}
+}

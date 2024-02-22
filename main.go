@@ -85,6 +85,9 @@ func main() {
 		} else if *Flag2X64SE {
 			Inference2X64SE()
 			return
+		} else if *FlagX64SA {
+			InferenceX64SA()
+			return
 		}
 		Inference()
 		return
