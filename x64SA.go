@@ -41,9 +41,33 @@ func LearnX64SA(name string) {
 	x2 := matrix.NewMatrix(Width, Space)
 	x3 := matrix.NewMatrix(Width, Space)
 	for i := 0; i < x1.Size(); i++ {
-		x1.Data = append(x1.Data, float32(rng.NormFloat64()*factor))
+		/*x1.Data = append(x1.Data, float32(rng.NormFloat64()*factor))
 		x2.Data = append(x2.Data, float32(rng.NormFloat64()*factor))
-		x3.Data = append(x3.Data, float32(rng.NormFloat64()*factor))
+		x3.Data = append(x3.Data, float32(rng.NormFloat64()*factor))*/
+		a := rng.Intn(6)
+		sample := 0.0
+		if a == 0 {
+			sample = factor
+		} else if a == 1 {
+			sample = -factor
+		}
+		x1.Data = append(x1.Data, float32(sample))
+		a = rng.Intn(6)
+		sample = 0.0
+		if a == 0 {
+			sample = factor
+		} else if a == 1 {
+			sample = -factor
+		}
+		x2.Data = append(x2.Data, float32(sample))
+		a = rng.Intn(6)
+		sample = 0.0
+		if a == 0 {
+			sample = factor
+		} else if a == 1 {
+			sample = -factor
+		}
+		x3.Data = append(x3.Data, float32(sample))
 	}
 
 	in := tf64.NewV(Space, 3)
