@@ -7,9 +7,12 @@ package main
 import (
 	"flag"
 	"fmt"
+	"math"
+	"math/rand"
 	"runtime"
 
 	"github.com/pointlander/datum/bible"
+	"github.com/pointlander/matrix"
 )
 
 const (
@@ -61,6 +64,38 @@ var (
 
 func main() {
 	flag.Parse()
+
+	rng := rand.New(rand.NewSource(1))
+	optimizer := matrix.NewOptimizer(rng, 8, .1, 1, func(samples []matrix.Sample, x ...matrix.Matrix) {
+		done := make(chan bool, 8)
+		process := func(index int) {
+			x := samples[index].Vars[0][0]
+			y := samples[index].Vars[0][1]
+			z := samples[index].Vars[0][2]
+			sample := matrix.Add(x, matrix.H(y, z))
+			rows, cols := sample.Rows, sample.Cols
+			sum := 0.0
+			for i := 0; i < rows; i++ {
+				for j := i + 1; j < rows; j++ {
+					for k := 0; k < cols; k++ {
+						sum += float64(sample.Data[i*cols+k] * sample.Data[j*cols+k])
+					}
+				}
+			}
+			sum = math.Abs(sum)
+			samples[index].Cost = sum
+			done <- true
+		}
+		for j := range samples {
+			go process(j)
+		}
+		for range samples {
+			<-done
+		}
+	}, matrix.NewCoord(8, 8))
+	s := optimizer.Optimize(1e-6)
+	result := matrix.Add(s.Vars[0][0], matrix.H(s.Vars[0][1], s.Vars[0][2]))
+	fmt.Println(result)
 
 	if *FlagLearn != "" {
 		if *Flag2X {
