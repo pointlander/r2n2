@@ -68,10 +68,12 @@ func LearnX64SA(name string) {
 			}
 			continue
 		}
-		factor := math.Sqrt(2.0 / float64(w.S[0]))
+		fmt.Printf("find %s\n", w.N)
+		m := GenerateMatrix(int64(4+i), w.S[0], w.S[1])
 		for i := 0; i < size; i++ {
-			w.X = append(w.X, rng.NormFloat64()*factor)
+			w.X = append(w.X, float64(m.Data[i]))
 		}
+		fmt.Printf("found %s\n", w.N)
 		w.States = make([][]float64, StateTotal)
 		for i := range w.States {
 			w.States[i] = make([]float64, len(w.X))
