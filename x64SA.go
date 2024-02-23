@@ -36,39 +36,15 @@ func LearnX64SA(name string) {
 	}
 	verses := bible.GetVerses()
 
-	factor := math.Sqrt(2.0 / float64(Width))
-	x1 := matrix.NewMatrix(Width, Space)
-	x2 := matrix.NewMatrix(Width, Space)
-	x3 := matrix.NewMatrix(Width, Space)
-	for i := 0; i < x1.Size(); i++ {
-		/*x1.Data = append(x1.Data, float32(rng.NormFloat64()*factor))
-		x2.Data = append(x2.Data, float32(rng.NormFloat64()*factor))
-		x3.Data = append(x3.Data, float32(rng.NormFloat64()*factor))*/
-		a := rng.Intn(6)
-		sample := 0.0
-		if a == 0 {
-			sample = factor
-		} else if a == 1 {
-			sample = -factor
-		}
-		x1.Data = append(x1.Data, float32(sample))
-		a = rng.Intn(6)
-		sample = 0.0
-		if a == 0 {
-			sample = factor
-		} else if a == 1 {
-			sample = -factor
-		}
-		x2.Data = append(x2.Data, float32(sample))
-		a = rng.Intn(6)
-		sample = 0.0
-		if a == 0 {
-			sample = factor
-		} else if a == 1 {
-			sample = -factor
-		}
-		x3.Data = append(x3.Data, float32(sample))
-	}
+	fmt.Println("find x1")
+	x1 := GenerateMatrix(1, Width, Space)
+	fmt.Println("found x1")
+	fmt.Println("find x2")
+	x2 := GenerateMatrix(2, Width, Space)
+	fmt.Println("found x2")
+	fmt.Println("find x3")
+	x3 := GenerateMatrix(3, Width, Space)
+	fmt.Println("found x3")
 
 	in := tf64.NewV(Space, 3)
 	in.X = in.X[:cap(in.X)]

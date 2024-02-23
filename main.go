@@ -62,10 +62,8 @@ var (
 	FlagInference = flag.String("inference", "", "inference mode")
 )
 
-func main() {
-	flag.Parse()
-
-	rng := rand.New(rand.NewSource(1))
+func GenerateMatrix(seed int64, cols, rows int) matrix.Matrix {
+	rng := rand.New(rand.NewSource(seed))
 	optimizer := matrix.NewOptimizer(rng, 8, .1, 1, func(samples []matrix.Sample, x ...matrix.Matrix) {
 		done := make(chan bool, 8)
 		process := func(index int) {
@@ -92,10 +90,18 @@ func main() {
 		for range samples {
 			<-done
 		}
-	}, matrix.NewCoord(8, 8))
-	s := optimizer.Optimize(1e-6)
-	result := matrix.Add(s.Vars[0][0], matrix.H(s.Vars[0][1], s.Vars[0][2]))
-	fmt.Println(result)
+	}, matrix.NewCoord(cols, rows))
+	s := optimizer.Optimize(1e-3)
+	output := matrix.Add(s.Vars[0][0], matrix.H(s.Vars[0][1], s.Vars[0][2]))
+	factor := math.Sqrt(2.0 / float64(cols))
+	for i := range output.Data {
+		output.Data[i] *= float32(factor)
+	}
+	return output
+}
+
+func main() {
+	flag.Parse()
 
 	if *FlagLearn != "" {
 		if *Flag2X {
