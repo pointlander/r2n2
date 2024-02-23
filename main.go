@@ -62,6 +62,31 @@ var (
 	FlagInference = flag.String("inference", "", "inference mode")
 )
 
+func Markov(verses []bible.Verse) *[256][256][256]float32 {
+	markov := [256][256][256]float32{}
+	for _, verse := range verses {
+		a, b := 0, 0
+		for _, v := range verse.Verse {
+			markov[a][b][v]++
+			a, b = int(v), a
+		}
+	}
+	for i := range markov {
+		for j := range markov[i] {
+			sum := float32(0.0)
+			for _, v := range markov[i][j] {
+				sum += v
+			}
+			if sum > 0 {
+				for k := range markov[i][j] {
+					markov[i][j][k] /= sum
+				}
+			}
+		}
+	}
+	return &markov
+}
+
 func GenerateMatrix(seed int64, cols, rows int) matrix.Matrix {
 	rng := rand.New(rand.NewSource(seed))
 	output := matrix.NewMatrix(cols, rows)
@@ -151,6 +176,10 @@ func main() {
 		panic(err)
 	}
 	verses := bible.GetVerses()
+
+	markov := Markov(verses)
+	_ = markov
+
 	maxVerse, maxWords := 0, 0
 	for _, verse := range verses {
 		if length := len(verse.Verse); length > maxVerse {
