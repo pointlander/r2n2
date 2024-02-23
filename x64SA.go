@@ -37,13 +37,13 @@ func LearnX64SA(name string) {
 	verses := bible.GetVerses()
 
 	fmt.Println("find x1")
-	x1 := GenerateMatrix(1, Width, Space)
+	x1 := GenerateMatrix(1, Space, Space)
 	fmt.Println("found x1")
 	fmt.Println("find x2")
-	x2 := GenerateMatrix(2, Width, Space)
+	x2 := GenerateMatrix(2, Space, Space)
 	fmt.Println("found x2")
 	fmt.Println("find x3")
-	x3 := GenerateMatrix(3, Width, Space)
+	x3 := GenerateMatrix(3, Symbols, Symbols)
 	fmt.Println("found x3")
 
 	in := tf64.NewV(Space, 3)
@@ -105,23 +105,25 @@ func LearnX64SA(name string) {
 			out.Zero()
 			set.Zero()
 			verse := "^" + verses[i].Verse + "$"
-			input := matrix.NewZeroMatrix(Width, 3)
+			input := matrix.NewZeroMatrix(Symbols, 3)
+			feedback := matrix.NewZeroMatrix(Space, 3)
+			for i := 0; i < 3; i++ {
+				feedback.Data[i*Space] = 1
+			}
 			cost := 0.0
 			for l, symbol := range verse[:len(verses[i].Verse)-1] {
-				for j := 0; j < 3; j++ {
-					for k := 0; k < Symbols; k++ {
-						input.Data[j*Width+k] = 0
-					}
+				for j := range input.Data {
+					input.Data[j] = 0
 				}
 				input.Data[symbol] = 1
-				input.Data[Width+symbol] = 1
-				input.Data[2*Width+symbol] = 1
-				q := matrix.MulT(x1, input)
-				k := matrix.MulT(x2, input)
+				input.Data[Symbols+symbol] = 1
+				input.Data[2*Symbols+symbol] = 1
+				q := matrix.MulT(x1, feedback)
+				k := matrix.MulT(x2, feedback)
 				v := matrix.MulT(x3, input)
 				output := matrix.Sigmoid(matrix.SelfAttention(q, k, v))
 				for j := 0; j < 3; j++ {
-					copy(input.Data[j*Width+Symbols:], output.Data[j*Space:(j+1)*Space])
+					copy(feedback.Data, output.Data)
 				}
 
 				for j := range in.X {
