@@ -93,6 +93,8 @@ func Learn2X64(name string) {
 	}
 	verses := bible.GetVerses()
 
+	markov := Markov(verses)
+
 	input := tf64.NewV(Symbols, 1)
 	input.X = input.X[:cap(input.X)]
 	output := tf64.NewV(Symbols, 1)
@@ -272,12 +274,13 @@ func Learn2X64(name string) {
 			feedbackcp.Zero()
 			set.Zero()
 			cost := 0.0
+			last := 0
 			for l, symbol := range verse[:len(verses[i].Verse)-1] {
-				for i := range input.X {
-					input.X[i] = 0
-				}
 				input.Zero()
-				input.X[int(symbol)] = 1
+				for i := range input.X {
+					input.X[i] = float64(markov[symbol][last][i])
+				}
+				last = int(symbol)
 				for i := range output.X {
 					output.X[i] = 0
 				}
