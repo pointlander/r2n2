@@ -111,29 +111,23 @@ func LearnX64SA(name string) {
 				feedback.Data[i*Space] = 1
 			}
 			cost := 0.0
+			index := 0
 			for l, symbol := range verse[:len(verses[i].Verse)-1] {
-				for j := range input.Data {
-					input.Data[j] = 0
+				for i := 0; i < Symbols; i++ {
+					input.Data[index*Symbols+i] = 0
+					out.X[index*Symbols+i] = 0
 				}
-				input.Data[symbol] = 1
-				input.Data[Symbols+symbol] = 1
-				input.Data[2*Symbols+symbol] = 1
+				input.Data[index*Symbols+int(symbol)] = 1
+				out.X[index*Symbols+int(verse[l+1])] = 1
+				index = (index + 1) % 3
 				q := matrix.MulT(x1, feedback)
 				k := matrix.MulT(x2, feedback)
 				v := matrix.MulT(x3, input)
 				output := matrix.Sigmoid(matrix.SelfAttention(q, k, v))
-				for j := 0; j < 3; j++ {
-					copy(feedback.Data, output.Data)
-				}
+				copy(feedback.Data, output.Data)
 
 				for j := range in.X {
 					in.X[j] = float64(output.Data[j])
-				}
-				for j := range out.X {
-					out.X[j] = 0
-				}
-				for j := 0; j < 3; j++ {
-					out.X[j*Symbols+int(verse[l+1])] = 1
 				}
 				cost += tf64.Gradient(l2).X[0]
 			}

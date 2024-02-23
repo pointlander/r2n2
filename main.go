@@ -64,7 +64,12 @@ var (
 
 func GenerateMatrix(seed int64, cols, rows int) matrix.Matrix {
 	rng := rand.New(rand.NewSource(seed))
-	optimizer := matrix.NewOptimizer(rng, 8, .1, 1, func(samples []matrix.Sample, x ...matrix.Matrix) {
+	output := matrix.NewMatrix(cols, rows)
+	factor := math.Sqrt(2.0 / float64(cols))
+	for i := 0; i < output.Size(); i++ {
+		output.Data = append(output.Data, float32(factor*rng.NormFloat64()))
+	}
+	/*optimizer := matrix.NewOptimizer(rng, 8, .1, 1, func(samples []matrix.Sample, x ...matrix.Matrix) {
 		done := make(chan bool, 8)
 		process := func(index int) {
 			x := samples[index].Vars[0][0]
@@ -96,7 +101,7 @@ func GenerateMatrix(seed int64, cols, rows int) matrix.Matrix {
 	factor := math.Sqrt(2.0 / float64(cols))
 	for i := range output.Data {
 		output.Data[i] *= float32(factor)
-	}
+	}*/
 	return output
 }
 
