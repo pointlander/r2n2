@@ -381,6 +381,14 @@ func Learn2X64(name string) {
 // Inference2X64 inference 64 bit 2X r2n2 model
 func Inference2X64() {
 	rng := rand.New(rand.NewSource(1))
+
+	bible, err := bible.Load()
+	if err != nil {
+		panic(err)
+	}
+	verses := bible.GetVerses()
+	markov := Markov(verses)
+
 	in := []rune{'^'}
 	type Net struct {
 		name     string
@@ -389,6 +397,7 @@ func Inference2X64() {
 		l3a      tf64.Meta
 		input    tf64.V
 		feedback tf64.V
+		last     int
 	}
 	names := strings.Split(*FlagInference, ",")
 	nets := make([]Net, len(names))
@@ -417,14 +426,16 @@ func Inference2X64() {
 		l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
 		l3a := tf64.Softmax(tf64.Hadamard(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")), temp.Meta()))
 		for i := range in[:len(in)-1] {
+			current := in[i]
+			distribution := markov[current][nets[i].last]
 			for j := range input.X {
-				input.X[j] = 0
+				input.X[j] = float64(distribution[j])
 			}
-			input.X[int(in[i])] = 1
 			l2(func(a *tf64.V) bool {
 				copy(feedback.X, a.X)
 				return true
 			})
+			nets[i].last = int(current)
 		}
 
 		nets[i].name = name
@@ -438,10 +449,11 @@ func Inference2X64() {
 		symbols := make([][]float64, len(nets))
 		selected, sum := rng.Float64(), 0.0
 		for n := range nets {
+			current := in[len(in)-1]
+			distribution := markov[current][nets[n].last]
 			for j := range nets[n].input.X {
-				nets[n].input.X[j] = 0
+				nets[n].input.X[j] = float64(distribution[j])
 			}
-			nets[n].input.X[int(in[len(in)-1])] = 1
 			nets[n].l3a(func(a *tf64.V) bool {
 				symbols[n] = a.X
 				return true
@@ -450,6 +462,7 @@ func Inference2X64() {
 				copy(nets[n].feedback.X, a.X)
 				return true
 			})
+			nets[n].last = int(current)
 		}
 		router := matrix.NewMatrix(Symbols, len(nets))
 		for _, symbol := range symbols {
