@@ -80,6 +80,11 @@ func Graph64(directory string) {
 	}
 }
 
+func sigmoid(rng *rand.Rand) float64 {
+	e := math.Exp(.5 * rng.NormFloat64())
+	return e / (e + 1)
+}
+
 // Learn2X64 learns 64bit 2X the r2n2 model
 func Learn2X64(name string) {
 	seed, err := strconv.Atoi(name)
@@ -154,8 +159,7 @@ func Learn2X64(name string) {
 			input := tf64.NewV(Symbols, 1)
 			input.X = input.X[:cap(input.X)]
 			for i := range input.X {
-				e := math.Exp(rng.NormFloat64())
-				input.X[i] = e / (e + 1)
+				input.X[i] = sigmoid(rng)
 			}
 			inputs = append(inputs, &input)
 			l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
@@ -165,8 +169,7 @@ func Learn2X64(name string) {
 				input := tf64.NewV(Symbols, 1)
 				input.X = input.X[:cap(input.X)]
 				for i := range input.X {
-					e := math.Exp(rng.NormFloat64())
-					input.X[i] = e / (e + 1)
+					input.X[i] = sigmoid(rng)
 				}
 				inputs = append(inputs, &input)
 				l1 = tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
