@@ -141,6 +141,9 @@ func Learn2X64(name string) {
 			w.States[i] = make([]float64, len(w.X))
 		}
 	}
+	dropout := map[string]interface{}{
+		"rng": rng,
+	}
 	{
 		pow := func(x float64) float64 {
 			y := math.Pow(x, 1.0)
@@ -153,9 +156,6 @@ func Learn2X64(name string) {
 			feedback.X[i] = 0
 		}
 		feedback.Zero()
-		dropout := map[string]interface{}{
-			"rng": rng,
-		}
 		for i := 0; i < 256; i++ {
 			set.Zero()
 			inputs := make([]*tf64.V, 0, 8)
@@ -244,11 +244,11 @@ func Learn2X64(name string) {
 		}
 	}
 
-	l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
+	l1 := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1"))), dropout)
 	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 	l2 := tf64.Copy(feedbackcp.Meta(),
 		tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2"))))
-	l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
+	l3 := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3"))), dropout)
 	l3a := tf64.CrossEntropy(tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
 
 	iterations := 100
