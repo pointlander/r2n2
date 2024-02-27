@@ -153,6 +153,9 @@ func Learn2X64(name string) {
 			feedback.X[i] = 0
 		}
 		feedback.Zero()
+		dropout := map[string]interface{}{
+			"rng": rng,
+		}
 		for i := 0; i < 256; i++ {
 			set.Zero()
 			inputs := make([]*tf64.V, 0, 8)
@@ -162,8 +165,8 @@ func Learn2X64(name string) {
 				input.X[i] = sigmoid(rng)
 			}
 			inputs = append(inputs, &input)
-			l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
-				tf64.Concat(input.Meta(), feedback.Meta())), set.Get("b2")))
+			l1 := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
+				tf64.Concat(input.Meta(), feedback.Meta())), set.Get("b2"))), dropout)
 			length := rng.Intn(32) + 1
 			for j := 0; j < length; j++ {
 				input := tf64.NewV(Symbols, 1)
@@ -172,8 +175,8 @@ func Learn2X64(name string) {
 					input.X[i] = sigmoid(rng)
 				}
 				inputs = append(inputs, &input)
-				l1 = tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
-					tf64.Concat(input.Meta(), l1)), set.Get("b2")))
+				l1 = tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
+					tf64.Concat(input.Meta(), l1)), set.Get("b2"))), dropout)
 			}
 			x := 0
 			y := Symbols
@@ -186,10 +189,11 @@ func Learn2X64(name string) {
 				"begin": &y,
 				"end":   &z,
 			}
-			l1d := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"), l1), set.Get("b2d")))
+			l1d := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"), l1), set.Get("b2d"))), dropout)
 			cost := tf64.Avg(tf64.Quadratic(tf64.Slice(l1d, options), inputs[0].Meta()))
 			for j := 0; j < length; j++ {
-				l1d = tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"), tf64.Slice(l1d, options1)), set.Get("b2d")))
+				l1d = tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"),
+					tf64.Slice(l1d, options1)), set.Get("b2d"))), dropout)
 				cost = tf64.Add(cost, tf64.Avg(tf64.Quadratic(tf64.Slice(l1d, options), inputs[j+1].Meta())))
 			}
 			total := tf64.Gradient(cost).X[0]
@@ -265,7 +269,7 @@ func Learn2X64(name string) {
 		}
 
 		total := 0.0
-		for i := 0; i < len(verses); i++ {
+		for i := 0; i < 16; i++ {
 			verse := "^" + verses[i].Verse + "$"
 			for i := range feedback.X {
 				feedback.X[i] = 0
