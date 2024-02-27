@@ -108,10 +108,7 @@ func LearnSSN(name string) {
 	set.Add("b1", Symbols)
 	set.Add("w1a", Symbols, Symbols)
 	set.Add("b1a", Symbols)
-	set.Add("w2", Width, Space)
-	set.Add("b2", Space)
-	set.Add("w2d", Space, Width)
-	set.Add("b2d", Width)
+	set.Add("w2", Space, Space)
 	set.Add("w3", Space, Space)
 	set.Add("b3", Space)
 	set.Add("w3a", Space, Symbols)
@@ -139,110 +136,11 @@ func LearnSSN(name string) {
 	dropout := map[string]interface{}{
 		"rng": rng,
 	}
-	{
-		pow := func(x float64) float64 {
-			y := math.Pow(x, 1.0)
-			if math.IsNaN(y) || math.IsInf(y, 0) {
-				return 0
-			}
-			return y
-		}
-		for i := range feedback.X {
-			feedback.X[i] = 0
-		}
-		feedback.Zero()
-		for i := 0; i < 256; i++ {
-			set.Zero()
-			inputs := make([]*tf64.V, 0, 8)
-			input := tf64.NewV(Symbols, 1)
-			input.X = input.X[:cap(input.X)]
-			for i := range input.X {
-				input.X[i] = sigmoid(rng)
-			}
-			inputs = append(inputs, &input)
-			l1 := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
-				tf64.Concat(input.Meta(), feedback.Meta())), set.Get("b2"))), dropout)
-			length := rng.Intn(32) + 1
-			for j := 0; j < length; j++ {
-				input := tf64.NewV(Symbols, 1)
-				input.X = input.X[:cap(input.X)]
-				for i := range input.X {
-					input.X[i] = sigmoid(rng)
-				}
-				inputs = append(inputs, &input)
-				l1 = tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"),
-					tf64.Concat(input.Meta(), l1)), set.Get("b2"))), dropout)
-			}
-			x := 0
-			y := Symbols
-			z := Width
-			options := map[string]interface{}{
-				"begin": &x,
-				"end":   &y,
-			}
-			options1 := map[string]interface{}{
-				"begin": &y,
-				"end":   &z,
-			}
-			l1d := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"), l1), set.Get("b2d"))), dropout)
-			cost := tf64.Avg(tf64.Quadratic(tf64.Slice(l1d, options), inputs[0].Meta()))
-			for j := 0; j < length; j++ {
-				l1d = tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2d"),
-					tf64.Slice(l1d, options1)), set.Get("b2d"))), dropout)
-				cost = tf64.Add(cost, tf64.Avg(tf64.Quadratic(tf64.Slice(l1d, options), inputs[j+1].Meta())))
-			}
-			total := tf64.Gradient(cost).X[0]
-			norm := 0.0
-			for _, p := range set.Weights {
-				for _, d := range p.D {
-					norm += d * d
-				}
-			}
-			norm = math.Sqrt(norm)
-			b1, b2 := pow(B1), pow(B2)
-			const Eta = .01
-			if norm > 1 {
-				scaling := 1 / norm
-				for _, w := range set.Weights {
-					if w.N != "w2" && w.N != "b2" && w.N != "w2d" && w.N != "b2d" {
-						continue
-					}
-					for l, d := range w.D {
-						g := d * scaling
-						m := B1*w.States[StateM][l] + (1-B1)*g
-						v := B2*w.States[StateV][l] + (1-B2)*g*g
-						w.States[StateM][l] = m
-						w.States[StateV][l] = v
-						mhat := m / (1 - b1)
-						vhat := v / (1 - b2)
-						w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
-					}
-				}
-			} else {
-				for _, w := range set.Weights {
-					if w.N != "w2" && w.N != "b2" && w.N != "w2d" && w.N != "b2d" {
-						continue
-					}
-					for l, d := range w.D {
-						g := d
-						m := B1*w.States[StateM][l] + (1-B1)*g
-						v := B2*w.States[StateV][l] + (1-B2)*g*g
-						w.States[StateM][l] = m
-						w.States[StateV][l] = v
-						mhat := m / (1 - b1)
-						vhat := v / (1 - b2)
-						w.X[l] -= Eta * mhat / (math.Sqrt(vhat) + 1e-8)
-					}
-				}
-			}
-			fmt.Println("pre", length, total/float64(length))
-		}
-	}
 
 	l1 := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1"))), dropout)
 	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 	l2 := tf64.Copy(feedbackcp.Meta(),
-		tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2"))))
+		tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), feedback.Meta()), l1a)))
 	l3 := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3"))), dropout)
 	l3a := tf64.CrossEntropy(tf64.Softmax(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a"))), output.Meta())
 
@@ -303,7 +201,7 @@ func LearnSSN(name string) {
 			if norm > 1 {
 				scaling := 1 / norm
 				for _, w := range set.Weights {
-					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
+					if w.N == "w2" {
 						continue
 					}
 					for l, d := range w.D {
@@ -322,7 +220,7 @@ func LearnSSN(name string) {
 				}
 			} else {
 				for _, w := range set.Weights {
-					if w.N == "w2" || w.N == "b2" || w.N == "w2d" || w.N == "b2d" {
+					if w.N == "w2" {
 						continue
 					}
 					for l, d := range w.D {
@@ -424,7 +322,7 @@ func InferenceSSN() {
 
 		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 		l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
-		l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), tf64.Concat(l1a, feedback.Meta())), set.Get("b2")))
+		l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), feedback.Meta()), l1a))
 		l3 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w3"), l2), set.Get("b3")))
 		l3a := tf64.Softmax(tf64.Hadamard(tf64.Add(tf64.Mul(set.Get("w3a"), l3), set.Get("b3a")), temp.Meta()))
 		for i := range in[:len(in)-1] {
