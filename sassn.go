@@ -103,6 +103,8 @@ func LearnSASSN(name string) {
 	feedback.X = feedback.X[:cap(feedback.X)]
 	feedbackcp := tf64.NewV(Space, 1)
 	feedbackcp.X = feedbackcp.X[:cap(feedbackcp.X)]
+	T := tf64.NewV(Symbols, 256)
+	T.X = T.X[:cap(T.X)]
 	set := tf64.NewSet()
 	set.Add("w1", Symbols, Symbols)
 	set.Add("b1", Symbols)
@@ -137,6 +139,7 @@ func LearnSASSN(name string) {
 		"rng": rng,
 	}
 
+	A := tf64.Mul(T.Meta(), T.Meta())
 	l1 := tf64.Dropout(tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1"))), dropout)
 	l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 	l2 := tf64.Copy(feedbackcp.Meta(),
@@ -175,11 +178,24 @@ func LearnSASSN(name string) {
 			set.Zero()
 			cost := 0.0
 			last := 0
+			buffer := [256][Symbols]float32{}
+			entry := 0
 			for l, symbol := range verse[:len(verses[i].Verse)-1] {
 				input.Zero()
 				for i := range input.X {
 					input.X[i] = float64(markov[symbol][last][i])
 				}
+				copy(buffer[entry][:], markov[symbol][last][:])
+				entry = (entry + 1) % len(buffer)
+				for e := 0; e < len(buffer); e++ {
+					for f := 0; f < Symbols; f++ {
+						T.X[e*Symbols+f] = float64(buffer[(e+entry)%len(buffer)][f])
+					}
+				}
+				A(func(a *tf64.V) bool {
+					copy(set.ByName["w2"].X, a.X)
+					return true
+				})
 				last = int(symbol)
 				for i := range output.X {
 					output.X[i] = 0
