@@ -309,11 +309,15 @@ func InferenceSASSN() {
 	type Net struct {
 		name     string
 		set      tf64.Set
+		A        tf64.Meta
 		l2       tf64.Meta
 		l3a      tf64.Meta
 		input    tf64.V
 		feedback tf64.V
+		T        tf64.V
 		last     int
+		buffer   [256][Symbols]float32
+		entry    int
 	}
 	names := strings.Split(*FlagInference, ",")
 	nets := make([]Net, len(names))
@@ -329,6 +333,8 @@ func InferenceSASSN() {
 		input.X = input.X[:cap(input.X)]
 		feedback := tf64.NewV(Space, 1)
 		feedback.X = feedback.X[:cap(feedback.X)]
+		T := tf64.NewV(Symbols, 256)
+		T.X = T.X[:cap(T.X)]
 
 		t := .5
 		temp := tf64.NewV(Symbols, 1)
@@ -336,6 +342,7 @@ func InferenceSASSN() {
 			temp.X = append(temp.X, 1/t)
 		}
 
+		A := tf64.Mul(T.Meta(), T.Meta())
 		l1 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w1"), input.Meta()), set.Get("b1")))
 		l1a := tf64.Add(tf64.Mul(set.Get("w1a"), l1), set.Get("b1a"))
 		l2 := tf64.Sigmoid(tf64.Add(tf64.Mul(set.Get("w2"), feedback.Meta()), l1a))
@@ -356,10 +363,12 @@ func InferenceSASSN() {
 
 		nets[i].name = name
 		nets[i].set = set
+		nets[i].A = A
 		nets[i].l2 = l2
 		nets[i].l3a = l3a
 		nets[i].input = input
 		nets[i].feedback = feedback
+		nets[i].T = T
 	}
 	for i := 0; i < 4*128; i++ {
 		symbols := make([][]float64, len(nets))
@@ -370,6 +379,17 @@ func InferenceSASSN() {
 			for j := range nets[n].input.X {
 				nets[n].input.X[j] = float64(distribution[j])
 			}
+			copy(nets[n].buffer[nets[n].entry][:], distribution[:])
+			nets[n].entry = (nets[n].entry + 1) % len(nets[n].buffer)
+			for e := 0; e < len(nets[n].buffer); e++ {
+				for f := 0; f < Symbols; f++ {
+					nets[n].T.X[e*Symbols+f] = float64(nets[n].buffer[(e+nets[n].entry)%len(nets[n].buffer)][f])
+				}
+			}
+			nets[n].A(func(a *tf64.V) bool {
+				copy(nets[n].set.ByName["w2"].X, a.X)
+				return true
+			})
 			nets[n].l3a(func(a *tf64.V) bool {
 				symbols[n] = a.X
 				return true
