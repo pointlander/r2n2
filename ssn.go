@@ -162,7 +162,7 @@ func LearnSSN(name string) {
 		}
 
 		total := 0.0
-		for i := 0; i < 16; i++ {
+		for i := 0; i < len(verses); i++ {
 			verse := "^" + verses[i].Verse + "$"
 			for i := range feedback.X {
 				feedback.X[i] = 0
