@@ -54,6 +54,8 @@ var (
 	Flag2X64 = flag.Bool("2X64", false, "learn the 64 bit 2X model")
 	// FlagSSN use the 64 bit ssn model
 	FlagSSN = flag.Bool("SSN", false, "learn the 64 bit ssn model")
+	// FlagSASSN use the 64 bit self attention ssn model
+	FlagSASSN = flag.Bool("SASSN", false, "learn the 64 bit self attention ssn model")
 	// Flag2X64SE use the 64 bit self entropy 2X model
 	Flag2X64SE = flag.Bool("2X64SE", false, "learn the 64 bit self entropy 2X model")
 	// FlagX64SA learn 64 bit self attention model
@@ -148,6 +150,9 @@ func main() {
 		} else if *FlagSSN {
 			LearnSSN(*FlagLearn)
 			return
+		} else if *FlagSASSN {
+			LearnSASSN(*FlagLearn)
+			return
 		}
 		Learn()
 		return
@@ -167,6 +172,9 @@ func main() {
 		} else if *FlagSSN {
 			InferenceSSN()
 			return
+		} else if *FlagSASSN {
+			InferenceSASSN()
+			return
 		}
 		Inference()
 		return
@@ -176,6 +184,9 @@ func main() {
 			return
 		} else if *FlagSSN {
 			GraphSSN(*FlagGraph)
+			return
+		} else if *FlagSASSN {
+			GraphSASSN(*FlagGraph)
 			return
 		}
 		Graph(*FlagGraph)
